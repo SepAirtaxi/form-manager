@@ -1,5 +1,5 @@
 // src/components/auth/Login.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -10,17 +10,31 @@ import {
   Typography,
   TextField,
   Button,
+  CircularProgress,
   makeStyles
 } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 
 const useStyles = makeStyles((theme) => ({
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    backgroundColor: '#f5f5f5'
+  },
   paper: {
-    marginTop: theme.spacing(8),
     padding: theme.spacing(4),
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    maxWidth: '400px',
+    width: '100%'
+  },
+  logo: {
+    height: '80px',
+    marginBottom: theme.spacing(4)
   },
   form: {
     width: '100%',
@@ -29,51 +43,71 @@ const useStyles = makeStyles((theme) => ({
   submit: {
     margin: theme.spacing(3, 0, 2),
   },
-  logo: {
-    marginBottom: theme.spacing(4),
-    height: '60px',
+  error: {
+    width: '100%',
+    marginBottom: theme.spacing(2)
   }
 }));
 
 function Login() {
   const classes = useStyles();
-  const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const from = location.state?.from?.pathname || '/';
+  
+  const { login, currentUser, userRole } = useAuth();
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // If user was redirected to login, remember where they were going
-  const from = location.state?.from?.pathname || '/admin/dashboard';
+  // Redirect if already logged in
+  useEffect(() => {
+    if (currentUser) {
+      // Redirect based on user role
+      if (userRole === 'admin' || userRole === 'manager') {
+        navigate('/admin/dashboard');
+      } else {
+        navigate('/dashboard');
+      }
+    }
+  }, [currentUser, userRole, navigate]);
   
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      setError('Please enter both email and password');
+      return;
+    }
     
     try {
       setError('');
       setLoading(true);
       await login(email, password);
-      navigate(from, { replace: true });
+      
+      // No need to navigate here, the useEffect will handle it
     } catch (err) {
+      console.error('Login error:', err);
       setError('Failed to log in. Please check your credentials.');
-      console.error(err);
     } finally {
       setLoading(false);
     }
   };
   
   return (
-    <Container component="main" maxWidth="xs">
+    <Container className={classes.container} maxWidth={false}>
       <Paper className={classes.paper} elevation={3}>
-        <Typography component="h1" variant="h5">
-          Copenhagen AirTaxi Admin Login
+        <Typography variant="h4" component="h1" gutterBottom>
+          Copenhagen AirTaxi
+        </Typography>
+        <Typography variant="h5" component="h2" gutterBottom>
+          Form Manager
         </Typography>
         
         {error && (
-          <Alert severity="error" style={{ width: '100%', marginTop: '16px' }}>
+          <Alert severity="error" className={classes.error}>
             {error}
           </Alert>
         )}
@@ -113,7 +147,7 @@ function Login() {
             className={classes.submit}
             disabled={loading}
           >
-            {loading ? 'Logging in...' : 'Sign In'}
+            {loading ? <CircularProgress size={24} /> : 'Sign In'}
           </Button>
         </form>
       </Paper>

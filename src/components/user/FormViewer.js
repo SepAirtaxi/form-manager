@@ -1,10 +1,11 @@
 // src/components/user/FormViewer.js
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { doc, getDoc, collection, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { doc, getDoc, collection, getDocs, addDoc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { generatePdf } from '../../services/pdfService';
 import { sendFormEmail } from '../../services/emailService';
+import { useAuth } from '../../contexts/AuthContext';
 
 // Material UI imports
 import {
@@ -33,11 +34,14 @@ import {
   DialogContent,
   DialogContentText,
   DialogTitle,
+  Snackbar,
   makeStyles
 } from '@material-ui/core';
+import { Alert } from '@material-ui/lab';
 import {
   ArrowBack as ArrowBackIcon,
-  Send as SendIcon
+  Send as SendIcon,
+  Save as SaveIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
@@ -79,8 +83,20 @@ const useStyles = makeStyles((theme) => ({
     maxWidth: '200px',
     marginTop: theme.spacing(1),
   },
-  submitButton: {
+  buttonsContainer: {
+    display: 'flex',
+    justifyContent: 'space-between',
     marginTop: theme.spacing(3),
+  },
+  draftLabel: {
+    backgroundColor: theme.palette.warning.main,
+    color: theme.palette.warning.contrastText,
+    padding: theme.spacing(0.5, 1),
+    borderRadius: theme.shape.borderRadius,
+    fontSize: '0.75rem',
+    fontWeight: 'bold',
+    display: 'inline-block',
+    marginLeft: theme.spacing(1),
   }
 }));
 
@@ -88,6 +104,10 @@ function FormViewer() {
   const classes = useStyles();
   const { formId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const draftId = searchParams.get('draft');
+  const { currentUser } = useAuth();
   
   const [form, setForm] = useState(null);
   const [signatures, setSignatures] = useState([]);
@@ -98,8 +118,11 @@ function FormViewer() {
   const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [successDialogOpen, setSuccessDialogOpen] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftSaved, setDraftSaved] = useState(false);
+  const [isDraft, setIsDraft] = useState(Boolean(draftId));
   
-  // Load form and signatures on component mount
+  // Load form, draft (if exists), and signatures on component mount
   useEffect(() => {
     async function loadData() {
       try {
@@ -123,7 +146,7 @@ function FormViewer() {
         setForm(formData);
         
         // Initialize form data structure
-        const initialFormData = {};
+        let initialFormData = {};
         formData.blocks.forEach(block => {
           if (block.type === 'field') {
             // Set default values based on field type
@@ -142,6 +165,34 @@ function FormViewer() {
             initialFormData[block.title] = '';
           }
         });
+        
+        // If we have a draft ID, load the draft data
+        if (draftId) {
+          const draftRef = doc(db, 'submissions', draftId);
+          const draftSnap = await getDoc(draftRef);
+          
+          if (draftSnap.exists()) {
+            const draftData = draftSnap.data();
+            
+            // Make sure this draft belongs to the current user
+            if (draftData.userId !== currentUser.uid) {
+              setError('You do not have permission to view this draft');
+              return;
+            }
+            
+            // Make sure this draft is for the correct form
+            if (draftData.formId !== formId) {
+              setError('This draft is for a different form');
+              return;
+            }
+            
+            // Use the draft data
+            initialFormData = draftData.data || initialFormData;
+            setIsDraft(true);
+          } else {
+            setError('Draft not found');
+          }
+        }
         
         setFormData(initialFormData);
         
@@ -163,8 +214,13 @@ function FormViewer() {
       }
     }
     
-    loadData();
-  }, [formId]);
+    if (currentUser) {
+      loadData();
+    } else {
+      setError('You must be logged in to view forms');
+      setLoading(false);
+    }
+  }, [formId, draftId, currentUser]);
   
   // Handle input changes
   const handleInputChange = (e) => {
@@ -212,6 +268,52 @@ function FormViewer() {
     return isValid;
   };
   
+  // Save form as draft
+  const handleSaveDraft = async () => {
+    if (!currentUser) {
+      setError('You must be logged in to save drafts');
+      return;
+    }
+    
+    setSavingDraft(true);
+    
+    try {
+      // Prepare submission data
+      const submissionData = {
+        formId,
+        formTitle: form.title,
+        formRevision: form.revision,
+        userId: currentUser.uid,
+        data: formData,
+        status: 'draft',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      };
+      
+      if (isDraft && draftId) {
+        // Update existing draft
+        const draftRef = doc(db, 'submissions', draftId);
+        await updateDoc(draftRef, {
+          data: formData,
+          updatedAt: serverTimestamp()
+        });
+      } else {
+        // Create new draft
+        const submissionRef = await addDoc(collection(db, 'submissions'), submissionData);
+        // Update URL with draft ID for bookmarking/sharing
+        navigate(`/form/${formId}?draft=${submissionRef.id}`, { replace: true });
+        setIsDraft(true);
+      }
+      
+      setDraftSaved(true);
+    } catch (err) {
+      setError('Error saving draft: ' + err.message);
+      console.error(err);
+    } finally {
+      setSavingDraft(false);
+    }
+  };
+  
   // Open submission confirmation dialog
   const handleSubmitClick = () => {
     if (validateForm()) {
@@ -230,9 +332,18 @@ function FormViewer() {
         formId,
         formTitle: form.title,
         formRevision: form.revision,
+        userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email,
         data: formData,
-        submittedAt: serverTimestamp()
+        status: 'submitted',
+        submittedAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
       };
+      
+      // If this was a draft, include the draft ID
+      if (isDraft && draftId) {
+        submissionData.draftId = draftId;
+      }
       
       // Add to Firestore
       const submissionRef = await addDoc(collection(db, 'submissions'), submissionData);
@@ -242,6 +353,16 @@ function FormViewer() {
       
       // Send email with PDF
       await sendFormEmail(form.title, pdfBlob);
+      
+      // If this was a draft, delete the draft (it's now submitted)
+      if (isDraft && draftId) {
+        try {
+          await deleteDoc(doc(db, 'submissions', draftId));
+        } catch (error) {
+          console.error('Error deleting draft after submission:', error);
+          // Non-critical error, don't need to show to user
+        }
+      }
       
       // Show success dialog
       setSuccessDialogOpen(true);
@@ -262,7 +383,12 @@ function FormViewer() {
   // Navigate back to form list after successful submission
   const handleSuccessClose = () => {
     setSuccessDialogOpen(false);
-    navigate('/forms');
+    navigate('/dashboard');
+  };
+  
+  // Close draft saved message
+  const handleDraftSavedClose = () => {
+    setDraftSaved(false);
   };
   
   // Render a field based on its type
@@ -494,9 +620,9 @@ function FormViewer() {
               Signature preview:
             </Typography>
             
-            {selectedSignature.signatureUrl ? (
+            {selectedSignature.signatureBase64 ? (
               <img 
-                src={selectedSignature.signatureUrl} 
+                src={selectedSignature.signatureBase64} 
                 alt={`${selectedSignature.name}'s signature`}
                 className={classes.signatureImage}
               />
@@ -514,7 +640,7 @@ function FormViewer() {
       </div>
     );
   };
-  
+
   // Render a form block based on its type
   const renderBlock = (block, index) => {
     switch (block.type) {
@@ -573,10 +699,10 @@ function FormViewer() {
         <Button
           variant="contained"
           color="primary"
-          onClick={() => navigate('/forms')}
+          onClick={() => navigate('/dashboard')}
           style={{ marginTop: '16px' }}
         >
-          Back to Forms
+          Back to Dashboard
         </Button>
       </Container>
     );
@@ -589,12 +715,15 @@ function FormViewer() {
           <IconButton
             edge="start"
             color="inherit"
-            onClick={() => navigate('/forms')}
+            onClick={() => navigate('/dashboard')}
           >
             <ArrowBackIcon />
           </IconButton>
           <Typography variant="h6" className={classes.title}>
             Form Completion
+            {isDraft && (
+              <span className={classes.draftLabel}>DRAFT</span>
+            )}
           </Typography>
         </Toolbar>
       </AppBar>
@@ -625,17 +754,29 @@ function FormViewer() {
             {form.blocks.map((block, index) => renderBlock(block, index))}
           </div>
           
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            startIcon={<SendIcon />}
-            className={classes.submitButton}
-            onClick={handleSubmitClick}
-            disabled={submitting}
-          >
-            {submitting ? 'Submitting...' : 'Submit Form'}
-          </Button>
+          <div className={classes.buttonsContainer}>
+            <Button
+              variant="outlined"
+              color="primary"
+              size="large"
+              startIcon={<SaveIcon />}
+              onClick={handleSaveDraft}
+              disabled={savingDraft}
+            >
+              {savingDraft ? 'Saving...' : (isDraft ? 'Update Draft' : 'Save as Draft')}
+            </Button>
+            
+            <Button
+              variant="contained"
+              color="primary"
+              size="large"
+              startIcon={<SendIcon />}
+              onClick={handleSubmitClick}
+              disabled={submitting}
+            >
+              {submitting ? 'Submitting...' : 'Submit Form'}
+            </Button>
+          </div>
         </Paper>
       </Container>
       
@@ -673,10 +814,21 @@ function FormViewer() {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleSuccessClose} color="primary" autoFocus>
-            Return to Forms
+            Return to Dashboard
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* Draft Saved Snackbar */}
+      <Snackbar
+        open={draftSaved}
+        autoHideDuration={6000}
+        onClose={handleDraftSavedClose}
+      >
+        <Alert onClose={handleDraftSavedClose} severity="success">
+          Form draft saved successfully. You can continue editing later.
+        </Alert>
+      </Snackbar>
     </>
   );
 }
