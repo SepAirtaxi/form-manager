@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../firebase';
+import { db } from '../../firebase';
 
 // Material UI imports
 import {
@@ -65,6 +64,8 @@ function CompanySettings() {
     phone: '',
     email: '',
     website: '',
+    vatEori: '',
+    easaApprovalNo: '',
     legalText: '',
     logoFile: null
   });
@@ -78,10 +79,12 @@ function CompanySettings() {
   useEffect(() => {
     async function loadSettings() {
       try {
+        console.log('Attempting to load company settings');
         const settingsRef = doc(db, 'settings', 'company');
         const settingsSnap = await getDoc(settingsRef);
         
         if (settingsSnap.exists()) {
+          console.log('Settings document exists');
           const data = settingsSnap.data();
           setFormData({
             name: data.name || 'Copenhagen AirTaxi / CAT Flyservice',
@@ -89,17 +92,22 @@ function CompanySettings() {
             phone: data.phone || '',
             email: data.email || '',
             website: data.website || '',
+            vatEori: data.vatEori || '',
+            easaApprovalNo: data.easaApprovalNo || '',
             legalText: data.legalText || '',
             logoFile: null
           });
           
-          if (data.logoUrl) {
-            setLogoPreview(data.logoUrl);
+          if (data.logoBase64) {
+            console.log('Logo found in settings');
+            setLogoPreview(data.logoBase64);
           }
+        } else {
+          console.log('No settings document found - using defaults');
         }
       } catch (err) {
+        console.error('Error loading company settings:', err);
         setError('Error loading company settings: ' + err.message);
-        console.error(err);
       } finally {
         setLoading(false);
       }
@@ -117,15 +125,17 @@ function CompanySettings() {
     });
   };
   
-  // Handle logo file upload
+  // Handle logo file upload with Base64 conversion
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     
     if (file) {
-      // Create a preview URL
+      console.log('Logo file selected:', file.name);
+      // Convert to Base64
       const reader = new FileReader();
       reader.onloadend = () => {
-        setLogoPreview(reader.result);
+        const base64String = reader.result;
+        setLogoPreview(base64String);
       };
       reader.readAsDataURL(file);
       
@@ -139,14 +149,10 @@ function CompanySettings() {
   // Save company settings
   const handleSave = async () => {
     try {
-      let logoUrl = logoPreview;
+      console.log('Attempting to save company settings');
       
-      // Upload new logo if provided
-      if (formData.logoFile) {
-        const fileRef = ref(storage, `company/logo_${Date.now()}.png`);
-        await uploadBytes(fileRef, formData.logoFile);
-        logoUrl = await getDownloadURL(fileRef);
-      }
+      // Store the base64 string directly in Firestore
+      const logoBase64 = logoPreview;
       
       // Save to Firestore
       const settingsRef = doc(db, 'settings', 'company');
@@ -156,16 +162,20 @@ function CompanySettings() {
         phone: formData.phone,
         email: formData.email,
         website: formData.website,
+        vatEori: formData.vatEori,
+        easaApprovalNo: formData.easaApprovalNo,
         legalText: formData.legalText,
-        logoUrl
+        logoBase64
       });
+      
+      console.log('Company settings saved successfully');
       
       // Show saved message
       setSaved(true);
       
     } catch (err) {
+      console.error('Error saving company settings:', err);
       setError('Error saving company settings: ' + err.message);
-      console.error(err);
     }
   };
   
@@ -267,6 +277,24 @@ function CompanySettings() {
               label="Website"
               name="website"
               value={formData.website}
+              onChange={handleInputChange}
+            />
+            
+            <TextField
+              fullWidth
+              margin="normal"
+              label="VAT/EORI Number"
+              name="vatEori"
+              value={formData.vatEori}
+              onChange={handleInputChange}
+            />
+            
+            <TextField
+              fullWidth
+              margin="normal"
+              label="EASA Approval Number"
+              name="easaApprovalNo"
+              value={formData.easaApprovalNo}
               onChange={handleInputChange}
             />
           </div>

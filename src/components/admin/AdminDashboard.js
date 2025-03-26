@@ -1,6 +1,8 @@
 // src/components/admin/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { collection, getDocs, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Material UI imports
@@ -23,14 +25,21 @@ import {
   DialogActions,
   DialogContent,
   DialogContentText,
-  DialogTitle
+  DialogTitle,
+  Grid,
+  Card,
+  CardContent,
+  CardActions
 } from '@material-ui/core';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   FileCopy as DuplicateIcon,
-  ExitToApp as LogoutIcon
+  ExitToApp as LogoutIcon,
+  Settings as SettingsIcon,
+  Create as CreateIcon,
+  Person as PersonIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
@@ -47,6 +56,25 @@ const useStyles = makeStyles((theme) => ({
   },
   tableContainer: {
     marginTop: theme.spacing(3),
+  },
+  card: {
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'transform 0.2s ease-in-out',
+    '&:hover': {
+      transform: 'translateY(-5px)',
+      boxShadow: theme.shadows[6]
+    }
+  },
+  cardTitle: {
+    fontWeight: 'bold',
+  },
+  cardContent: {
+    flexGrow: 1,
+  },
+  adminTools: {
+    marginBottom: theme.spacing(4),
   }
 }));
 
@@ -64,35 +92,6 @@ function AdminDashboard() {
   useEffect(() => {
     async function loadForms() {
       try {
-        // For initial testing, use sample data
-        const sampleForms = [
-          {
-            id: '1',
-            title: 'Engine Inspection Form',
-            revision: '1.0',
-            updatedAt: new Date(),
-            published: true
-          },
-          {
-            id: '2',
-            title: 'Airframe Inspection Form',
-            revision: '2.1',
-            updatedAt: new Date(),
-            published: true
-          },
-          {
-            id: '3',
-            title: 'Avionics Check Form',
-            revision: '1.3',
-            updatedAt: new Date(),
-            published: false
-          }
-        ];
-        
-        setForms(sampleForms);
-        
-        // Uncomment this code when you have Firebase set up
-        /*
         const formsQuery = query(collection(db, 'forms'), orderBy('updatedAt', 'desc'));
         const querySnapshot = await getDocs(formsQuery);
         
@@ -102,7 +101,6 @@ function AdminDashboard() {
         }));
         
         setForms(formsData);
-        */
       } catch (err) {
         setError('Error loading forms: ' + err.message);
         console.error(err);
@@ -124,11 +122,7 @@ function AdminDashboard() {
     if (!formToDelete) return;
     
     try {
-      // Uncomment this code when you have Firebase set up
-      /*
       await deleteDoc(doc(db, 'forms', formToDelete.id));
-      */
-      
       setForms(forms.filter(form => form.id !== formToDelete.id));
       setDeleteDialogOpen(false);
       setFormToDelete(null);
@@ -204,6 +198,93 @@ function AdminDashboard() {
           </Typography>
         )}
 
+        {/* Admin Tools Section */}
+        <div className={classes.adminTools}>
+          <Typography variant="h5" gutterBottom>
+            Admin Tools
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6} md={4}>
+              <Card className={classes.card}>
+                <CardContent className={classes.cardContent}>
+                  <Typography variant="h6" className={classes.cardTitle} gutterBottom>
+                    Create New Form
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Design a new form with custom fields, sections, and signature areas.
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<CreateIcon />}
+                    component={Link}
+                    to="/admin/form/new"
+                    fullWidth
+                  >
+                    Create Form
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={4}>
+              <Card className={classes.card}>
+                <CardContent className={classes.cardContent}>
+                  <Typography variant="h6" className={classes.cardTitle} gutterBottom>
+                    Signature Management
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Add, edit, or remove authorized signatories for form completion.
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<PersonIcon />}
+                    component={Link}
+                    to="/admin/signatures"
+                    fullWidth
+                  >
+                    Manage Signatures
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={4}>
+              <Card className={classes.card}>
+                <CardContent className={classes.cardContent}>
+                  <Typography variant="h6" className={classes.cardTitle} gutterBottom>
+                    Company Settings
+                  </Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Configure company information, logo, and legal text for forms.
+                  </Typography>
+                </CardContent>
+                <CardActions>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<SettingsIcon />}
+                    component={Link}
+                    to="/admin/company-settings"
+                    fullWidth
+                  >
+                    Edit Settings
+                  </Button>
+                </CardActions>
+              </Card>
+            </Grid>
+          </Grid>
+        </div>
+
+        {/* Forms List */}
+        <Typography variant="h5" gutterBottom>
+          Existing Forms
+        </Typography>
         <Button
           variant="contained"
           color="primary"
@@ -247,7 +328,7 @@ function AdminDashboard() {
                     </TableCell>
                     <TableCell>{form.revision || '1.0'}</TableCell>
                     <TableCell>
-                      {form.updatedAt ? new Date(form.updatedAt instanceof Date ? form.updatedAt : form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
+                      {form.updatedAt ? new Date(form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
                     </TableCell>
                     <TableCell>
                       {form.published ? 'Published' : 'Draft'}

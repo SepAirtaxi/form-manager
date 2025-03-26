@@ -7,12 +7,13 @@ import { getStorage } from 'firebase/storage';
 // Your web app's Firebase configuration
 // Replace these values with your actual Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyBf4j7AO0wFlqcxlfM1-_d8vBsNPq58adk",
-  authDomain: "catformmanager.firebaseapp.com",
-  projectId: "catformmanager",
-  storageBucket: "catformmanager.firebasestorage.app",
-  messagingSenderId: "636865518310",
-  appId: "1:636865518310:web:478beaa28c1f9d6233b927"
+  apiKey: "AIzaSyCAlfH0KMzKJY6Rg7vMjCXGiuZhGtSboR0",
+  authDomain: "catfm-48154.firebaseapp.com",
+  projectId: "catfm-48154",
+  storageBucket: "catfm-48154.firebasestorage.app",
+  messagingSenderId: "754530976368",
+  appId: "1:754530976368:web:5cdd758e3edd7dd7d9aab5",
+  measurementId: "G-YNWS78BCGP"
 };
 
 // Initialize Firebase

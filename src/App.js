@@ -1,4 +1,3 @@
-// src/App.js
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
@@ -10,59 +9,47 @@ import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Admin components
 import AdminDashboard from './components/admin/AdminDashboard';
-// We'll add these later:
+import SignatureManager from './components/admin/SignatureManager';
+import CompanySettings from './components/admin/CompanySettings';
+// Import other admin components as you implement them
 // import FormEditor from './components/admin/FormEditor';
-// import SignatureManager from './components/admin/SignatureManager';
-// import CompanySettings from './components/admin/CompanySettings';
 
 // User components
 import FormList from './components/user/FormList';
-// We'll add this later:
+// Import other user components as you implement them
 // import FormViewer from './components/user/FormViewer';
-
-// Temporary placeholders for components not yet implemented
-function FormEditor() {
-  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Form Editor</h1><p>This is where users will create and edit forms.</p></div>;
-}
-
-function SignatureManager() {
-  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Signature Manager</h1><p>This is where users will manage authorized signatories.</p></div>;
-}
-
-function CompanySettings() {
-  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Company Settings</h1><p>This is where users will configure company information.</p></div>;
-}
-
-function FormViewer() {
-  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Form Viewer</h1><p>This is where users will fill out and submit forms.</p></div>;
-}
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
+    <AuthProvider>
+      <Router>
         <Routes>
-          {/* Default redirect to form list */}
+          {/* Default route redirects to forms */}
           <Route path="/" element={<Navigate to="/forms" replace />} />
           
-          {/* Authentication */}
+          {/* User routes */}
+          <Route path="/forms" element={<FormList />} />
+          {/* Add form viewer route when ready */}
+          {/* <Route path="/form/:formId" element={<FormViewer />} /> */}
+          
+          {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           
-          {/* Admin routes (protected) */}
+          {/* Admin routes - protected */}
           <Route path="/admin" element={<ProtectedRoute />}>
             <Route path="dashboard" element={<AdminDashboard />} />
-            <Route path="form/new" element={<FormEditor />} />
-            <Route path="form/edit/:formId" element={<FormEditor />} />
             <Route path="signatures" element={<SignatureManager />} />
             <Route path="company-settings" element={<CompanySettings />} />
+            {/* Add other admin routes as you implement them */}
+            {/* <Route path="form/new" element={<FormEditor />} /> */}
+            {/* <Route path="form/edit/:formId" element={<FormEditor />} /> */}
           </Route>
           
-          {/* User routes (public) */}
-          <Route path="/forms" element={<FormList />} />
-          <Route path="/form/:formId" element={<FormViewer />} />
+          {/* Fallback route */}
+          <Route path="*" element={<Navigate to="/forms" replace />} />
         </Routes>
-      </AuthProvider>
-    </Router>
+      </Router>
+    </AuthProvider>
   );
 }
 

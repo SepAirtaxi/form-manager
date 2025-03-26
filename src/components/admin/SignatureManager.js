@@ -2,8 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../firebase';
+import { db } from '../../firebase';
 
 // Material UI imports
 import {
@@ -133,7 +132,7 @@ function SignatureManager() {
       title: signature.title,
       signatureFile: null
     });
-    setPreviewUrl(signature.signatureUrl || '');
+    setPreviewUrl(signature.signatureBase64 || '');
     setCurrentSignature(signature);
     setEditMode(true);
     setDialogOpen(true);
@@ -179,15 +178,16 @@ function SignatureManager() {
     });
   };
   
-  // Handle file upload
+  // Handle file upload - Convert to Base64
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     
     if (file) {
-      // Create a preview URL
+      // Create a preview URL and also store as base64
       const reader = new FileReader();
       reader.onloadend = () => {
-        setPreviewUrl(reader.result);
+        const base64String = reader.result;
+        setPreviewUrl(base64String);
       };
       reader.readAsDataURL(file);
       
@@ -198,62 +198,86 @@ function SignatureManager() {
     }
   };
   
-  // Save signature
+  // Save signature - Using Base64 encoding instead of Firebase Storage
   const handleSave = async () => {
     try {
+      console.log('Save button clicked');
+      
       // Validate form
       if (!formData.name || !formData.title) {
         setError('Name and Title are required');
         return;
       }
       
-      let signatureUrl = previewUrl;
+      console.log('Form data is valid');
       
-      // Upload new signature image if provided
-      if (formData.signatureFile) {
-        const fileRef = ref(storage, `signatures/${formData.name.replace(/\s+/g, '_')}_${Date.now()}.png`);
-        await uploadBytes(fileRef, formData.signatureFile);
-        signatureUrl = await getDownloadURL(fileRef);
+      // Check if we have a base64 image
+      if (!previewUrl && !editMode) {
+        setError('Please upload a signature image');
+        return;
       }
+      
+      // Store the base64 string directly in Firestore
+      const signatureBase64 = previewUrl;
       
       if (editMode && currentSignature) {
         // Update existing signature
-        const signatureRef = doc(db, 'signatures', currentSignature.id);
-        await updateDoc(signatureRef, {
-          name: formData.name,
-          title: formData.title,
-          signatureUrl: signatureUrl || currentSignature.signatureUrl,
-          updatedAt: serverTimestamp()
-        });
+        console.log('Updating existing signature:', currentSignature.id);
         
-        // Update in state
-        setSignatures(signatures.map(sig => 
-          sig.id === currentSignature.id 
-            ? { 
-                ...sig, 
-                name: formData.name, 
-                title: formData.title, 
-                signatureUrl: signatureUrl || sig.signatureUrl 
-              } 
-            : sig
-        ));
+        try {
+          const signatureRef = doc(db, 'signatures', currentSignature.id);
+          await updateDoc(signatureRef, {
+            name: formData.name,
+            title: formData.title,
+            signatureBase64: signatureBase64 || currentSignature.signatureBase64,
+            updatedAt: serverTimestamp()
+          });
+          console.log('Signature updated successfully');
+          
+          // Update in state
+          setSignatures(signatures.map(sig => 
+            sig.id === currentSignature.id 
+              ? { 
+                  ...sig, 
+                  name: formData.name, 
+                  title: formData.title, 
+                  signatureBase64: signatureBase64 || sig.signatureBase64 
+                } 
+              : sig
+          ));
+        } catch (updateError) {
+          console.error('Error updating signature in Firestore:', updateError);
+          setError('Error updating signature: ' + updateError.message);
+          return;
+        }
       } else {
         // Add new signature
+        console.log('Adding new signature');
+        
         const newSignature = {
           name: formData.name,
           title: formData.title,
-          signatureUrl,
+          signatureBase64,
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp()
         };
         
-        const docRef = await addDoc(collection(db, 'signatures'), newSignature);
-        
-        // Add to state
-        setSignatures([...signatures, { id: docRef.id, ...newSignature }]);
+        try {
+          console.log('Attempting to add document to Firestore');
+          const docRef = await addDoc(collection(db, 'signatures'), newSignature);
+          console.log('Document added with ID:', docRef.id);
+          
+          // Add to state
+          setSignatures([...signatures, { id: docRef.id, ...newSignature }]);
+        } catch (addError) {
+          console.error('Error adding signature to Firestore:', addError);
+          setError('Error saving signature: ' + addError.message);
+          return;
+        }
       }
       
       // Close dialog
+      console.log('Operation completed successfully, closing dialog');
       setDialogOpen(false);
       setFormData({
         name: '',
@@ -263,8 +287,8 @@ function SignatureManager() {
       setPreviewUrl('');
       setCurrentSignature(null);
     } catch (err) {
+      console.error('Unexpected error in handleSave:', err);
       setError('Error saving signature: ' + err.message);
-      console.error(err);
     }
   };
   
@@ -280,14 +304,15 @@ function SignatureManager() {
     setCurrentSignature(null);
     setError('');
   };
-  
+
+  // Render function
   return (
     <>
       <AppBar position="fixed">
         <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
+          <IconButton 
+            edge="start" 
+            color="inherit" 
             onClick={() => navigate('/admin/dashboard')}
           >
             <ArrowBackIcon />
@@ -295,8 +320,8 @@ function SignatureManager() {
           <Typography variant="h6" className={classes.title}>
             Signature Management
           </Typography>
-          <Button
-            color="inherit"
+          <Button 
+            color="inherit" 
             startIcon={<AddIcon />}
             onClick={handleAddClick}
           >
@@ -308,78 +333,73 @@ function SignatureManager() {
       <div className={classes.appBarSpacer} />
       
       <Container className={classes.container}>
-        {error && (
-          <Typography color="error" gutterBottom>
-            {error}
-          </Typography>
-        )}
-        
         <Typography variant="h4" gutterBottom>
           Authorized Signatories
         </Typography>
         
         <Typography variant="body1" paragraph>
-          Manage authorized signatories who can electronically sign forms. Each signatory needs a name, title/position, and signature image.
+          Manage the list of personnel authorized to sign forms. Signatures will be available for selection when completing forms.
         </Typography>
+        
+        {error && (
+          <Typography color="error" paragraph>
+            {error}
+          </Typography>
+        )}
         
         {loading ? (
           <Typography>Loading signatures...</Typography>
-        ) : signatures.length === 0 ? (
-          <Paper className={classes.paper} style={{ padding: '16px', textAlign: 'center' }}>
-            <Typography variant="subtitle1">
-              No signatures found. Add your first authorized signatory.
-            </Typography>
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              onClick={handleAddClick}
-              style={{ marginTop: '16px' }}
-            >
-              Add Signature
-            </Button>
-          </Paper>
         ) : (
-          <Grid container spacing={4}>
-            {signatures.map((signature) => (
-              <Grid item key={signature.id} xs={12} sm={6} md={4}>
-                <Card className={classes.card}>
-                  {signature.signatureUrl && (
-                    <CardMedia
-                      className={classes.cardMedia}
-                      image={signature.signatureUrl}
-                      title={`${signature.name}'s Signature`}
-                    />
-                  )}
-                  <CardContent className={classes.cardContent}>
-                    <Typography variant="h6" className={classes.signatureTitle}>
-                      {signature.name}
-                    </Typography>
-                    <Typography variant="subtitle1" color="textSecondary">
-                      {signature.title}
-                    </Typography>
-                  </CardContent>
-                  <CardActions>
-                    <Button
-                      size="small"
-                      color="primary"
-                      startIcon={<EditIcon />}
-                      onClick={() => handleEditClick(signature)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      size="small"
-                      color="secondary"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => handleDeleteClick(signature)}
-                    >
-                      Delete
-                    </Button>
-                  </CardActions>
-                </Card>
+          <Grid container spacing={3}>
+            {signatures.length === 0 ? (
+              <Grid item xs={12}>
+                <Paper style={{ padding: '16px', textAlign: 'center' }}>
+                  <Typography color="textSecondary">
+                    No signatures found. Click "Add Signature" to create one.
+                  </Typography>
+                </Paper>
               </Grid>
-            ))}
+            ) : (
+              signatures.map((signature) => (
+                <Grid item key={signature.id} xs={12} sm={6} md={4}>
+                  <Card className={classes.card}>
+                    {signature.signatureBase64 && (
+                      <CardMedia
+                        className={classes.cardMedia}
+                        image={signature.signatureBase64}
+                        title={`${signature.name}'s signature`}
+                      />
+                    )}
+                    <CardContent className={classes.cardContent}>
+                      <Typography variant="h6" className={classes.signatureTitle}>
+                        {signature.name}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        {signature.title}
+                      </Typography>
+                    </CardContent>
+                    <CardActions>
+                      <Button 
+                        size="small" 
+                        color="primary"
+                        startIcon={<EditIcon />}
+                        onClick={() => handleEditClick(signature)}
+                      >
+                        Edit
+                      </Button>
+                      <Button 
+                        size="small" 
+                        color="secondary"
+                        startIcon={<DeleteIcon />}
+                        onClick={() => handleDeleteClick(signature)}
+                      >
+                        Delete
+                      </Button>
+                    </CardActions>
+                  </Card>
+                </Grid>
+              ))
+            )}
           </Grid>
         )}
       </Container>
@@ -396,61 +416,59 @@ function SignatureManager() {
             </Typography>
           )}
           
-          <TextField
-            fullWidth
-            margin="normal"
-            label="Name"
-            name="name"
-            value={formData.name}
-            onChange={handleInputChange}
-            required
-          />
-          
-          <TextField
-            fullWidth
-            margin="normal"
-            label="Title/Position"
-            name="title"
-            value={formData.title}
-            onChange={handleInputChange}
-            required
-          />
-          
-          <Divider style={{ margin: '16px 0' }} />
-          
-          <Typography variant="subtitle1" gutterBottom>
-            Signature Image
-          </Typography>
-          
-          <input
-            accept="image/*"
-            style={{ display: 'none' }}
-            id="signature-file"
-            type="file"
-            onChange={handleFileChange}
-          />
-          <label htmlFor="signature-file">
-            <Button
-              variant="contained"
-              component="span"
-              color="primary"
-            >
-              {editMode ? 'Change Signature Image' : 'Upload Signature Image'}
-            </Button>
-          </label>
-          
-          {previewUrl && (
-            <div style={{ marginTop: '16px' }}>
-              <Typography variant="subtitle2" gutterBottom>
-                Preview:
-              </Typography>
-              <img 
-                src={previewUrl} 
-                alt="Signature Preview" 
-                className={classes.signaturePreview}
-              />
-            </div>
-          )}
+          <form className={classes.form} noValidate>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Name"
+              name="name"
+              value={formData.name}
+              onChange={handleInputChange}
+              fullWidth
+              required
+            />
+            
+            <TextField
+              margin="dense"
+              label="Title/Position"
+              name="title"
+              value={formData.title}
+              onChange={handleInputChange}
+              fullWidth
+              required
+            />
+            
+            <input
+              accept="image/*"
+              style={{ display: 'none' }}
+              id="signature-upload"
+              type="file"
+              onChange={handleFileChange}
+            />
+            <label htmlFor="signature-upload">
+              <Button
+                variant="contained"
+                component="span"
+                color="primary"
+                style={{ marginTop: '16px' }}
+              >
+                {editMode ? 'Change Signature Image' : 'Upload Signature Image'}
+              </Button>
+            </label>
+            
+            {previewUrl && (
+              <div style={{ marginTop: '16px' }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Signature Preview:
+                </Typography>
+                <img 
+                  src={previewUrl} 
+                  alt="Signature Preview" 
+                  className={classes.signaturePreview}
+                />
+              </div>
+            )}
+          </form>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose} color="default">
@@ -463,10 +481,7 @@ function SignatureManager() {
       </Dialog>
       
       {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={cancelDelete}
-      >
+      <Dialog open={deleteDialogOpen} onClose={cancelDelete}>
         <DialogTitle>Confirm Deletion</DialogTitle>
         <DialogContent>
           <Typography>
