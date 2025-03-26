@@ -20,12 +20,15 @@ The Form Manager is a comprehensive solution for creating, managing, completing,
 
 ## Current Development Status
 
-This project is currently in early development stage. The foundational code has been written for all key components, but we're still working on:
+This project is currently in early development stage. We have managed to implement and test early versions of many of the back end core features:
 
-1. Setting up the development environment
-2. Resolving dependency and syntax issues
-3. Connecting to Firebase services
-4. Testing core functionality
+1. Firebase setup and integration
+2. Admin login function
+3. Signature module
+4. Company detail module
+5. Basic setup of the form manager, including revision control, minor/major revision function, draft function,. Currently WIP
+
+More features need to be implemented, such as refining the group block functions in the editor, and metadata/tagging for archiving.
 
 ## Project Structure
 
