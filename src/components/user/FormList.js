@@ -19,10 +19,8 @@ import {
   Toolbar,
   makeStyles
 } from '@material-ui/core';
-import {
-  Search as SearchIcon,
-  Assignment as FormIcon
-} from '@material-ui/icons';
+import SearchIcon from '@material-ui/icons/Search';
+import AssignmentIcon from '@material-ui/icons/Assignment';
 
 const useStyles = makeStyles((theme) => ({
   appBarSpacer: theme.mixins.toolbar,
@@ -67,6 +65,33 @@ function FormList() {
   useEffect(() => {
     async function loadForms() {
       try {
+        // For initial testing, use sample data
+        const sampleForms = [
+          {
+            id: '1',
+            title: 'Engine Inspection Form',
+            description: 'Complete inspection for aircraft engines',
+            revision: '1.0'
+          },
+          {
+            id: '2',
+            title: 'Airframe Inspection Form',
+            description: 'Structural inspection for aircraft frame components',
+            revision: '2.1'
+          },
+          {
+            id: '3',
+            title: 'Avionics Check Form',
+            description: 'Verification of all electronic systems',
+            revision: '1.3'
+          }
+        ];
+        
+        setForms(sampleForms);
+        setFilteredForms(sampleForms);
+        
+        // Uncomment this code when you have Firebase set up
+        /*
         // Query only published forms
         const formsQuery = query(
           collection(db, 'forms'),
@@ -83,6 +108,7 @@ function FormList() {
         
         setForms(formsData);
         setFilteredForms(formsData);
+        */
       } catch (err) {
         setError('Error loading forms: ' + err.message);
         console.error(err);
@@ -182,7 +208,7 @@ function FormList() {
                     <Button
                       size="small"
                       color="primary"
-                      startIcon={<FormIcon />}
+                      startIcon={<AssignmentIcon />}
                       component={Link}
                       to={`/form/${form.id}`}
                     >

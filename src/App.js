@@ -1,44 +1,67 @@
+// src/App.js
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
 import './App.css';
 
-// Simplified Form List component for testing
-function FormList() {
-  return (
-    <div style={{ padding: '20px' }}>
-      <h1>Copenhagen AirTaxi - Form Manager</h1>
-      <h2>Available Forms</h2>
-      <p>This is a simplified view of the form list. In the full application, this will display all available forms.</p>
-      
-      <div style={{ marginTop: '20px', padding: '20px', border: '1px solid #ccc', borderRadius: '5px' }}>
-        <h3>Sample Form</h3>
-        <p>Engine Inspection Form - Rev 1.0</p>
-        <button style={{ padding: '8px 16px', background: '#4285f4', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          Open Form
-        </button>
-      </div>
-    </div>
-  );
+// Auth components
+import Login from './components/auth/Login';
+import ProtectedRoute from './components/auth/ProtectedRoute';
+
+// Admin components
+import AdminDashboard from './components/admin/AdminDashboard';
+// We'll add these later:
+// import FormEditor from './components/admin/FormEditor';
+// import SignatureManager from './components/admin/SignatureManager';
+// import CompanySettings from './components/admin/CompanySettings';
+
+// User components
+import FormList from './components/user/FormList';
+// We'll add this later:
+// import FormViewer from './components/user/FormViewer';
+
+// Temporary placeholders for components not yet implemented
+function FormEditor() {
+  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Form Editor</h1><p>This is where users will create and edit forms.</p></div>;
+}
+
+function SignatureManager() {
+  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Signature Manager</h1><p>This is where users will manage authorized signatories.</p></div>;
+}
+
+function CompanySettings() {
+  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Company Settings</h1><p>This is where users will configure company information.</p></div>;
+}
+
+function FormViewer() {
+  return <div style={{ padding: '20px', marginTop: '64px' }}><h1>Form Viewer</h1><p>This is where users will fill out and submit forms.</p></div>;
 }
 
 function App() {
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<FormList />} />
-        <Route path="/admin" element={
-          <div style={{ padding: '20px' }}>
-            <h1>Admin Dashboard</h1>
-            <p>This would be the admin dashboard after logging in.</p>
-          </div>
-        } />
-        <Route path="/login" element={
-          <div style={{ padding: '20px' }}>
-            <h1>Login Page</h1>
-            <p>This would be the login page for administrators.</p>
-          </div>
-        } />
-      </Routes>
+      <AuthProvider>
+        <Routes>
+          {/* Default redirect to form list */}
+          <Route path="/" element={<Navigate to="/forms" replace />} />
+          
+          {/* Authentication */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* Admin routes (protected) */}
+          <Route path="/admin" element={<ProtectedRoute />}>
+            <Route path="dashboard" element={<AdminDashboard />} />
+            <Route path="form/new" element={<FormEditor />} />
+            <Route path="form/edit/:formId" element={<FormEditor />} />
+            <Route path="signatures" element={<SignatureManager />} />
+            <Route path="company-settings" element={<CompanySettings />} />
+          </Route>
+          
+          {/* User routes (public) */}
+          <Route path="/forms" element={<FormList />} />
+          <Route path="/form/:formId" element={<FormViewer />} />
+        </Routes>
+      </AuthProvider>
     </Router>
   );
 }

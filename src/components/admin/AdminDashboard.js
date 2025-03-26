@@ -1,8 +1,6 @@
 // src/components/admin/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { collection, getDocs, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
-import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 
 // Material UI imports
@@ -66,6 +64,35 @@ function AdminDashboard() {
   useEffect(() => {
     async function loadForms() {
       try {
+        // For initial testing, use sample data
+        const sampleForms = [
+          {
+            id: '1',
+            title: 'Engine Inspection Form',
+            revision: '1.0',
+            updatedAt: new Date(),
+            published: true
+          },
+          {
+            id: '2',
+            title: 'Airframe Inspection Form',
+            revision: '2.1',
+            updatedAt: new Date(),
+            published: true
+          },
+          {
+            id: '3',
+            title: 'Avionics Check Form',
+            revision: '1.3',
+            updatedAt: new Date(),
+            published: false
+          }
+        ];
+        
+        setForms(sampleForms);
+        
+        // Uncomment this code when you have Firebase set up
+        /*
         const formsQuery = query(collection(db, 'forms'), orderBy('updatedAt', 'desc'));
         const querySnapshot = await getDocs(formsQuery);
         
@@ -75,6 +102,7 @@ function AdminDashboard() {
         }));
         
         setForms(formsData);
+        */
       } catch (err) {
         setError('Error loading forms: ' + err.message);
         console.error(err);
@@ -96,7 +124,11 @@ function AdminDashboard() {
     if (!formToDelete) return;
     
     try {
+      // Uncomment this code when you have Firebase set up
+      /*
       await deleteDoc(doc(db, 'forms', formToDelete.id));
+      */
+      
       setForms(forms.filter(form => form.id !== formToDelete.id));
       setDeleteDialogOpen(false);
       setFormToDelete(null);
@@ -215,7 +247,7 @@ function AdminDashboard() {
                     </TableCell>
                     <TableCell>{form.revision || '1.0'}</TableCell>
                     <TableCell>
-                      {form.updatedAt ? new Date(form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
+                      {form.updatedAt ? new Date(form.updatedAt instanceof Date ? form.updatedAt : form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
                     </TableCell>
                     <TableCell>
                       {form.published ? 'Published' : 'Draft'}

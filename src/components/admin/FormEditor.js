@@ -468,3 +468,6 @@ function FormEditor() {
       </Dialog>
     </div>
   );
+}
+
+export default FormEditor;
