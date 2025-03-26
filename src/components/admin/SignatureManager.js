@@ -280,3 +280,211 @@ function SignatureManager() {
     setCurrentSignature(null);
     setError('');
   };
+  
+  return (
+    <>
+      <AppBar position="fixed">
+        <Toolbar>
+          <IconButton
+            edge="start"
+            color="inherit"
+            onClick={() => navigate('/admin/dashboard')}
+          >
+            <ArrowBackIcon />
+          </IconButton>
+          <Typography variant="h6" className={classes.title}>
+            Signature Management
+          </Typography>
+          <Button
+            color="inherit"
+            startIcon={<AddIcon />}
+            onClick={handleAddClick}
+          >
+            Add Signature
+          </Button>
+        </Toolbar>
+      </AppBar>
+
+      <div className={classes.appBarSpacer} />
+      
+      <Container className={classes.container}>
+        {error && (
+          <Typography color="error" gutterBottom>
+            {error}
+          </Typography>
+        )}
+        
+        <Typography variant="h4" gutterBottom>
+          Authorized Signatories
+        </Typography>
+        
+        <Typography variant="body1" paragraph>
+          Manage authorized signatories who can electronically sign forms. Each signatory needs a name, title/position, and signature image.
+        </Typography>
+        
+        {loading ? (
+          <Typography>Loading signatures...</Typography>
+        ) : signatures.length === 0 ? (
+          <Paper className={classes.paper} style={{ padding: '16px', textAlign: 'center' }}>
+            <Typography variant="subtitle1">
+              No signatures found. Add your first authorized signatory.
+            </Typography>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={handleAddClick}
+              style={{ marginTop: '16px' }}
+            >
+              Add Signature
+            </Button>
+          </Paper>
+        ) : (
+          <Grid container spacing={4}>
+            {signatures.map((signature) => (
+              <Grid item key={signature.id} xs={12} sm={6} md={4}>
+                <Card className={classes.card}>
+                  {signature.signatureUrl && (
+                    <CardMedia
+                      className={classes.cardMedia}
+                      image={signature.signatureUrl}
+                      title={`${signature.name}'s Signature`}
+                    />
+                  )}
+                  <CardContent className={classes.cardContent}>
+                    <Typography variant="h6" className={classes.signatureTitle}>
+                      {signature.name}
+                    </Typography>
+                    <Typography variant="subtitle1" color="textSecondary">
+                      {signature.title}
+                    </Typography>
+                  </CardContent>
+                  <CardActions>
+                    <Button
+                      size="small"
+                      color="primary"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEditClick(signature)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      color="secondary"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDeleteClick(signature)}
+                    >
+                      Delete
+                    </Button>
+                  </CardActions>
+                </Card>
+              </Grid>
+            ))}
+          </Grid>
+        )}
+      </Container>
+      
+      {/* Add/Edit Signature Dialog */}
+      <Dialog open={dialogOpen} onClose={handleClose} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          {editMode ? 'Edit Signature' : 'Add New Signature'}
+        </DialogTitle>
+        <DialogContent>
+          {error && (
+            <Typography color="error" paragraph>
+              {error}
+            </Typography>
+          )}
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Name"
+            name="name"
+            value={formData.name}
+            onChange={handleInputChange}
+            required
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Title/Position"
+            name="title"
+            value={formData.title}
+            onChange={handleInputChange}
+            required
+          />
+          
+          <Divider style={{ margin: '16px 0' }} />
+          
+          <Typography variant="subtitle1" gutterBottom>
+            Signature Image
+          </Typography>
+          
+          <input
+            accept="image/*"
+            style={{ display: 'none' }}
+            id="signature-file"
+            type="file"
+            onChange={handleFileChange}
+          />
+          <label htmlFor="signature-file">
+            <Button
+              variant="contained"
+              component="span"
+              color="primary"
+            >
+              {editMode ? 'Change Signature Image' : 'Upload Signature Image'}
+            </Button>
+          </label>
+          
+          {previewUrl && (
+            <div style={{ marginTop: '16px' }}>
+              <Typography variant="subtitle2" gutterBottom>
+                Preview:
+              </Typography>
+              <img 
+                src={previewUrl} 
+                alt="Signature Preview" 
+                className={classes.signaturePreview}
+              />
+            </div>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose} color="default">
+            Cancel
+          </Button>
+          <Button onClick={handleSave} color="primary">
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={cancelDelete}
+      >
+        <DialogTitle>Confirm Deletion</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the signature for {signatureToDelete?.name}?
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDelete} color="primary">
+            Cancel
+          </Button>
+          <Button onClick={confirmDelete} color="secondary">
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+export default SignatureManager;
