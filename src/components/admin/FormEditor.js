@@ -12,11 +12,6 @@ import {
   Typography,
   TextField,
   Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   FormControl,
   FormLabel,
   RadioGroup,
@@ -30,6 +25,13 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  ListItemIcon,
+  IconButton,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   makeStyles
 } from '@material-ui/core';
 import {
@@ -38,16 +40,17 @@ import {
   Delete as DeleteIcon,
   DragIndicator as DragIcon,
   Save as SaveIcon,
-  Publish as PublishIcon
+  Publish as PublishIcon,
+  ArrowBack as ArrowBackIcon,
+  ChevronRight as ExpandIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
   root: {
     flexGrow: 1,
   },
-  container: {
-    paddingTop: theme.spacing(4),
-    paddingBottom: theme.spacing(4),
+  content: {
+    padding: theme.spacing(3),
   },
   paper: {
     padding: theme.spacing(3),
@@ -69,13 +72,23 @@ const useStyles = makeStyles((theme) => ({
     marginBottom: theme.spacing(1),
     borderRadius: theme.shape.borderRadius,
   },
+  nestedBlockItem: {
+    marginLeft: theme.spacing(4),
+    border: `1px solid ${theme.palette.divider}`,
+    marginBottom: theme.spacing(1),
+    borderRadius: theme.shape.borderRadius,
+  },
+  groupBlock: {
+    backgroundColor: theme.palette.background.default,
+  },
   dragHandle: {
     cursor: 'move',
   },
-  nestedBlock: {
-    paddingLeft: theme.spacing(4),
-  },
   addBlockButton: {
+    marginTop: theme.spacing(1),
+  },
+  addNestedBlockButton: {
+    marginLeft: theme.spacing(4),
     marginTop: theme.spacing(1),
   },
   revisionControl: {
@@ -84,13 +97,10 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.palette.background.default,
     borderRadius: theme.shape.borderRadius,
   },
-  formTitle: {
-    marginBottom: theme.spacing(3),
-  },
-  actionButtons: {
-    marginBottom: theme.spacing(3),
+  headerButtons: {
     display: 'flex',
-    gap: theme.spacing(2),
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing(3),
   }
 }));
 
@@ -107,7 +117,10 @@ function FormEditor() {
     blocks: [],
     revision: '1.0',
     published: false,
-    hasDraft: false
+    hasDraft: false,
+    department: '',
+    tags: [],
+    owner: ''
   });
   
   const [loading, setLoading] = useState(isEditMode);
@@ -117,6 +130,10 @@ function FormEditor() {
   const [currentBlockIndex, setCurrentBlockIndex] = useState(-1);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [revisionType, setRevisionType] = useState('minor');
+  const [parentBlockId, setParentBlockId] = useState(null);
+  
+  // Flattened blocks for rendering purpose
+  const [flattenedBlocks, setFlattenedBlocks] = useState([]);
   
   // Load form data if in edit mode
   useEffect(() => {
@@ -128,10 +145,13 @@ function FormEditor() {
         const formSnap = await getDoc(formRef);
         
         if (formSnap.exists()) {
-          setFormData(formSnap.data());
+          const data = formSnap.data();
+          setFormData(data);
+          // Flatten the blocks for rendering
+          flattenBlocksForDisplay(data.blocks);
         } else {
           setError('Form not found');
-          navigate('/admin');
+          navigate('/admin/dashboard');
         }
       } catch (err) {
         setError('Error loading form: ' + err.message);
@@ -143,8 +163,41 @@ function FormEditor() {
     
     if (isEditMode) {
       loadFormData();
+    } else {
+      // Initialize flattenedBlocks for new form
+      setFlattenedBlocks([]);
     }
   }, [formId, isEditMode, navigate]);
+  
+  // Helper function to flatten the hierarchical blocks for display
+  const flattenBlocksForDisplay = (blocks, level = 0, parentId = null) => {
+    let flattened = [];
+    
+    blocks.forEach((block, index) => {
+      // Add the current block with its level and index info
+      flattened.push({
+        ...block,
+        level,
+        index,
+        parentId,
+        flatIndex: flattened.length
+      });
+      
+      // If it's a group block with children, recursively flatten those too
+      if (block.type === 'group' && block.children && block.children.length > 0) {
+        const childBlocks = flattenBlocksForDisplay(block.children, level + 1, block.id);
+        flattened = flattened.concat(childBlocks);
+      }
+    });
+    
+    setFlattenedBlocks(flattened);
+    return flattened;
+  };
+  
+  // Helper function to create a unique block ID
+  const generateBlockId = () => {
+    return 'block_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+  };
   
   // Helper function to calculate next revision number
   const getNextRevision = (type) => {
@@ -167,14 +220,15 @@ function FormEditor() {
     });
   };
   
-  // Open block editor
-  const handleAddBlock = (parentIndex = -1) => {
+  // Open block editor to add a new block
+  const handleAddBlock = (parentId = null) => {
     setCurrentBlock({
       type: 'field',
       title: '',
-      parentIndex
+      id: generateBlockId()
     });
     setCurrentBlockIndex(-1);
+    setParentBlockId(parentId);
     setBlockEditorOpen(true);
   };
   
@@ -182,38 +236,118 @@ function FormEditor() {
   const handleEditBlock = (block, index) => {
     setCurrentBlock({...block});
     setCurrentBlockIndex(index);
+    setParentBlockId(block.parentId);
     setBlockEditorOpen(true);
   };
   
   // Save block from editor
   const handleSaveBlock = (blockData) => {
-    let updatedBlocks = [...formData.blocks];
+    const updatedFormData = {...formData};
     
+    // If this is a new block
     if (currentBlockIndex === -1) {
-      // Add new block
-      updatedBlocks.push(blockData);
+      // If there's a parent block ID, add it to that group's children
+      if (parentBlockId) {
+        // Find the parent block in the hierarchy
+        const findAndAddToParent = (blocks) => {
+          for (let i = 0; i < blocks.length; i++) {
+            if (blocks[i].id === parentBlockId) {
+              // Initialize children array if it doesn't exist
+              if (!blocks[i].children) {
+                blocks[i].children = [];
+              }
+              // Add the new block to children
+              blocks[i].children.push({
+                ...blockData,
+                id: blockData.id || generateBlockId()
+              });
+              return true;
+            }
+            // If this is a group block, search its children
+            if (blocks[i].type === 'group' && blocks[i].children) {
+              if (findAndAddToParent(blocks[i].children)) {
+                return true;
+              }
+            }
+          }
+          return false;
+        };
+        
+        findAndAddToParent(updatedFormData.blocks);
+      } else {
+        // Add to root level
+        updatedFormData.blocks.push({
+          ...blockData,
+          id: blockData.id || generateBlockId()
+        });
+      }
     } else {
       // Update existing block
-      updatedBlocks[currentBlockIndex] = blockData;
+      const targetBlock = flattenedBlocks[currentBlockIndex];
+      
+      // Function to find and update the block in the hierarchy
+      const findAndUpdateBlock = (blocks) => {
+        for (let i = 0; i < blocks.length; i++) {
+          if (blocks[i].id === targetBlock.id) {
+            // Update this block with new data, preserving its ID and children
+            const children = blocks[i].children;
+            blocks[i] = {
+              ...blockData,
+              id: targetBlock.id
+            };
+            if (children) {
+              blocks[i].children = children;
+            }
+            return true;
+          }
+          // If this is a group block, search its children
+          if (blocks[i].type === 'group' && blocks[i].children) {
+            if (findAndUpdateBlock(blocks[i].children)) {
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+      
+      findAndUpdateBlock(updatedFormData.blocks);
     }
     
-    setFormData({
-      ...formData,
-      blocks: updatedBlocks
-    });
+    setFormData(updatedFormData);
+    flattenBlocksForDisplay(updatedFormData.blocks);
     
     setBlockEditorOpen(false);
     setCurrentBlock(null);
     setCurrentBlockIndex(-1);
+    setParentBlockId(null);
   };
   
   // Delete block
   const handleDeleteBlock = (index) => {
-    const updatedBlocks = formData.blocks.filter((_, i) => i !== index);
-    setFormData({
-      ...formData,
-      blocks: updatedBlocks
-    });
+    const targetBlock = flattenedBlocks[index];
+    const updatedFormData = {...formData};
+    
+    // Function to find and remove the block from the hierarchy
+    const findAndRemoveBlock = (blocks) => {
+      for (let i = 0; i < blocks.length; i++) {
+        if (blocks[i].id === targetBlock.id) {
+          // Remove this block
+          blocks.splice(i, 1);
+          return true;
+        }
+        // If this is a group block, search its children
+        if (blocks[i].type === 'group' && blocks[i].children) {
+          if (findAndRemoveBlock(blocks[i].children)) {
+            return true;
+          }
+        }
+      }
+      return false;
+    };
+    
+    findAndRemoveBlock(updatedFormData.blocks);
+    setFormData(updatedFormData);
+    flattenBlocksForDisplay(updatedFormData.blocks);
   };
   
   // Save form as draft
@@ -310,9 +444,70 @@ function FormEditor() {
     setPublishDialogOpen(false);
   };
   
+  // Cancel form editing
+  const handleCancel = () => {
+    navigate('/admin/dashboard');
+  };
+  
+  // Render a block in the list
+  const renderBlockItem = (block, index) => {
+    const isGroupBlock = block.type === 'group';
+    const isNested = block.level > 0;
+    
+    return (
+      <React.Fragment key={block.id || index}>
+        <ListItem 
+          className={`${isNested ? classes.nestedBlockItem : classes.blockItem} ${isGroupBlock ? classes.groupBlock : ''}`}
+          button
+          onClick={() => handleEditBlock(block, block.flatIndex)}
+          style={{ paddingLeft: `${(block.level + 1) * 16}px` }}
+        >
+          <ListItemIcon>
+            <DragIcon className={classes.dragHandle} />
+          </ListItemIcon>
+          
+          <ListItemText
+            primary={
+              <Typography style={{ fontWeight: isGroupBlock ? 'bold' : 'normal' }}>
+                {block.title || 'Untitled Block'} ({block.type})
+              </Typography>
+            }
+            secondary={block.description || ''}
+          />
+          
+          <ListItemSecondaryAction>
+            {isGroupBlock && (
+              <IconButton 
+                edge="end" 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddBlock(block.id);
+                }}
+              >
+                <AddIcon />
+              </IconButton>
+            )}
+            <IconButton edge="end" onClick={(e) => {
+              e.stopPropagation();
+              handleEditBlock(block, block.flatIndex);
+            }}>
+              <EditIcon />
+            </IconButton>
+            <IconButton edge="end" onClick={(e) => {
+              e.stopPropagation();
+              handleDeleteBlock(block.flatIndex);
+            }}>
+              <DeleteIcon />
+            </IconButton>
+          </ListItemSecondaryAction>
+        </ListItem>
+      </React.Fragment>
+    );
+  };
+  
   if (loading) {
     return (
-      <Container className={classes.container}>
+      <Container className={classes.content}>
         <Typography variant="h6">Loading...</Typography>
       </Container>
     );
@@ -320,36 +515,40 @@ function FormEditor() {
   
   return (
     <div className={classes.root}>
-      <Container className={classes.container}>
-        <Typography variant="h4" className={classes.formTitle}>
-          {isEditMode ? 'Edit Form' : 'Create New Form'}
-        </Typography>
-        
-        <div className={classes.actionButtons}>
-          <Button 
-            variant="contained" 
-            color="primary" 
-            startIcon={<SaveIcon />}
-            onClick={handleSaveDraft}
-          >
-            Save Draft
-          </Button>
-          <Button 
-            variant="contained" 
-            color="secondary" 
-            startIcon={<PublishIcon />}
-            onClick={handlePublishClick}
-          >
-            Publish
-          </Button>
-          <Button 
+      <Container className={classes.content}>
+        <div className={classes.headerButtons}>
+          <Button
             variant="outlined"
-            onClick={() => navigate('/admin/dashboard')}
+            startIcon={<ArrowBackIcon />}
+            onClick={handleCancel}
           >
             Cancel
           </Button>
+          <div>
+            <Button 
+              variant="outlined" 
+              color="primary"
+              startIcon={<SaveIcon />}
+              onClick={handleSaveDraft}
+              style={{ marginRight: '8px' }}
+            >
+              Save Draft
+            </Button>
+            <Button 
+              variant="contained"
+              color="primary"
+              startIcon={<PublishIcon />}
+              onClick={handlePublishClick}
+            >
+              Publish
+            </Button>
+          </div>
         </div>
-
+        
+        <Typography variant="h4" gutterBottom>
+          {isEditMode ? 'Edit Form' : 'Create New Form'}
+        </Typography>
+        
         {error && (
           <Typography color="error" component="div" className={classes.formSection}>
             {error}
@@ -384,6 +583,27 @@ function FormEditor() {
             multiline
             rows={3}
           />
+          
+          {/* Department selection */}
+          <FormControl fullWidth margin="normal" variant="outlined">
+            <InputLabel>Department</InputLabel>
+            <Select
+              name="department"
+              value={formData.department || ''}
+              onChange={handleInputChange}
+              label="Department"
+            >
+              <MenuItem value="">
+                <em>None</em>
+              </MenuItem>
+              <MenuItem value="Maintenance">Maintenance</MenuItem>
+              <MenuItem value="Operations">Operations</MenuItem>
+              <MenuItem value="Engineering">Engineering</MenuItem>
+              <MenuItem value="Administration">Administration</MenuItem>
+              <MenuItem value="HR">Human Resources</MenuItem>
+              <MenuItem value="Training">Training</MenuItem>
+            </Select>
+          </FormControl>
           
           {formData.published && (
             <div className={classes.revisionControl}>
@@ -422,48 +642,17 @@ function FormEditor() {
             </Typography>
             
             <Typography variant="subtitle2" gutterBottom>
-              Add blocks to create the structure of your form. Blocks can be fields, groups, or signature areas.
+              Add blocks to create the structure of your form. Group blocks can contain other blocks.
             </Typography>
           </div>
           
           <List className={classes.blockList}>
-            {formData.blocks.length === 0 ? (
+            {flattenedBlocks.length === 0 ? (
               <Typography align="center" color="textSecondary">
                 No blocks added yet. Click the "Add Block" button to start building your form.
               </Typography>
             ) : (
-              formData.blocks.map((block, index) => (
-                <ListItem 
-                  key={index}
-                  className={classes.blockItem}
-                  button
-                  onClick={() => handleEditBlock(block, index)}
-                >
-                  <IconButton className={classes.dragHandle} size="small">
-                    <DragIcon />
-                  </IconButton>
-                  
-                  <ListItemText
-                    primary={`${block.title || 'Untitled Block'} (${block.type})`}
-                    secondary={block.description || ''}
-                  />
-                  
-                  <ListItemSecondaryAction>
-                    <IconButton edge="end" onClick={(e) => {
-                      e.stopPropagation();
-                      handleEditBlock(block, index);
-                    }}>
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton edge="end" onClick={(e) => {
-                      e.stopPropagation();
-                      handleDeleteBlock(index);
-                    }}>
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-              ))
+              flattenedBlocks.map((block, index) => renderBlockItem(block, index))
             )}
           </List>
           
@@ -472,7 +661,7 @@ function FormEditor() {
             color="primary"
             startIcon={<AddIcon />}
             className={classes.addBlockButton}
-            onClick={() => handleAddBlock()}
+            onClick={() => handleAddBlock(null)}
           >
             Add Block
           </Button>

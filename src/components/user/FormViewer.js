@@ -1,5 +1,5 @@
 // src/components/user/FormViewer.js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { doc, getDoc, collection, getDocs, addDoc, updateDoc, serverTimestamp, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -26,29 +26,38 @@ import {
   FormGroup,
   FormHelperText,
   Divider,
-  AppBar,
-  Toolbar,
-  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
   DialogTitle,
   Snackbar,
+  Tabs,
+  Tab,
+  Box,
+  Drawer,
+  ListItem,
+  ListItemText,
+  List,
+  ListItemIcon,
+  CircularProgress,
+  Stepper,
+  Step,
+  StepLabel,
+  Hidden,
   makeStyles
 } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 import {
-  ArrowBack as ArrowBackIcon,
   Send as SendIcon,
-  Save as SaveIcon
+  Save as SaveIcon,
+  CheckCircle as CompleteIcon,
+  RadioButtonUnchecked as IncompleteIcon,
+  NavigateNext as NextIcon,
+  NavigateBefore as PrevIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
-  appBarSpacer: theme.mixins.toolbar,
-  title: {
-    flexGrow: 1,
-  },
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
@@ -97,8 +106,81 @@ const useStyles = makeStyles((theme) => ({
     fontWeight: 'bold',
     display: 'inline-block',
     marginLeft: theme.spacing(1),
+  },
+  navigationDrawer: {
+    width: 280,
+    flexShrink: 0,
+  },
+  drawer: {
+    width: 280,
+    flexShrink: 0,
+  },
+  drawerPaper: {
+    width: 280,
+    paddingTop: theme.spacing(2),
+  },
+  content: {
+    flexGrow: 1,
+    marginLeft: 0,
+    [theme.breakpoints.up('md')]: {
+      marginLeft: 280,
+    },
+  },
+  tabPanel: {
+    padding: theme.spacing(3),
+  },
+  completeIcon: {
+    color: theme.palette.success.main,
+  },
+  incompleteIcon: {
+    color: theme.palette.text.disabled,
+  },
+  activeTab: {
+    borderLeft: `4px solid ${theme.palette.primary.main}`,
+    backgroundColor: theme.palette.action.selected,
+  },
+  navigationButtons: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing(4),
+  },
+  bottomButtons: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing(3),
+    padding: theme.spacing(2),
+    backgroundColor: theme.palette.background.paper,
+    boxShadow: theme.shadows[1],
+    position: 'sticky',
+    bottom: 0,
+    zIndex: 10,
+  },
+  stepperContainer: {
+    padding: theme.spacing(2, 0),
+    marginBottom: theme.spacing(2),
   }
 }));
+
+// Tab Panel component
+function TabPanel(props) {
+  const { children, value, index, ...other } = props;
+
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`form-tabpanel-${index}`}
+      aria-labelledby={`form-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box p={3}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
 
 function FormViewer() {
   const classes = useStyles();
@@ -122,6 +204,12 @@ function FormViewer() {
   const [draftSaved, setDraftSaved] = useState(false);
   const [isDraft, setIsDraft] = useState(Boolean(draftId));
   
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState(0);
+  const [tabGroups, setTabGroups] = useState([]);
+  const [groupCompletionStatus, setGroupCompletionStatus] = useState({});
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+  
   // Load form, draft (if exists), and signatures on component mount
   useEffect(() => {
     async function loadData() {
@@ -143,26 +231,35 @@ function FormViewer() {
           return;
         }
         
-        setForm(formData);
+        // Process the form blocks to extract group structure
+        const { processedGroups, flatBlocks } = processFormStructure(formData.blocks);
+        const formWithProcessedBlocks = {
+          ...formData,
+          processedGroups,
+          flatBlocks
+        };
+        
+        setForm(formWithProcessedBlocks);
+        setTabGroups(processedGroups);
         
         // Initialize form data structure
         let initialFormData = {};
-        formData.blocks.forEach(block => {
+        flatBlocks.forEach(block => {
           if (block.type === 'field') {
             // Set default values based on field type
             switch (block.fieldType) {
               case 'checkbox':
-                initialFormData[block.title] = false;
+                initialFormData[block.id] = false;
                 break;
               case 'radio':
               case 'dropdown':
-                initialFormData[block.title] = '';
+                initialFormData[block.id] = '';
                 break;
               default:
-                initialFormData[block.title] = '';
+                initialFormData[block.id] = '';
             }
           } else if (block.type === 'signature') {
-            initialFormData[block.title] = '';
+            initialFormData[block.id] = '';
           }
         });
         
@@ -196,6 +293,9 @@ function FormViewer() {
         
         setFormData(initialFormData);
         
+        // Initialize group completion status
+        updateGroupCompletionStatus(initialFormData, processedGroups, flatBlocks);
+        
         // Load signatures
         const signaturesQuery = collection(db, 'signatures');
         const signaturesSnap = await getDocs(signaturesQuery);
@@ -222,14 +322,110 @@ function FormViewer() {
     }
   }, [formId, draftId, currentUser]);
   
+  // Process form blocks to extract group structure
+  const processFormStructure = (blocks) => {
+    // Start with a default 'General' group for ungrouped fields
+    const processedGroups = [
+      {
+        id: 'general',
+        title: 'General',
+        description: 'General form fields',
+        index: 0,
+        blocks: []
+      }
+    ];
+    
+    // Flatten all blocks for easier validation
+    const flatBlocks = [];
+    
+    // Function to process blocks recursively
+    const processBlocks = (blockList, parentGroupId = 'general') => {
+      blockList.forEach(block => {
+        // Add ID if missing
+        if (!block.id) {
+          block.id = `block_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+        }
+        
+        // Add the block to the flat list
+        flatBlocks.push(block);
+        
+        if (block.type === 'group') {
+          // Create a new group
+          const groupIndex = processedGroups.length;
+          processedGroups.push({
+            ...block,
+            index: groupIndex,
+            blocks: []
+          });
+          
+          // Process children if any
+          if (block.children && block.children.length > 0) {
+            processBlocks(block.children, block.id);
+          }
+        } else {
+          // Add this block to its parent group's blocks
+          const parentGroup = processedGroups.find(g => g.id === parentGroupId);
+          if (parentGroup) {
+            parentGroup.blocks.push(block);
+          } else {
+            // Fallback to general group
+            processedGroups[0].blocks.push(block);
+          }
+        }
+      });
+    };
+    
+    // Process the blocks
+    processBlocks(blocks);
+    
+    // If General group has no blocks, remove it
+    if (processedGroups[0].blocks.length === 0 && processedGroups.length > 1) {
+      processedGroups.shift();
+      // Update indices
+      processedGroups.forEach((group, index) => {
+        group.index = index;
+      });
+    }
+    
+    return { processedGroups, flatBlocks };
+  };
+  
+  // Update group completion status
+  const updateGroupCompletionStatus = (data, groups, blocks) => {
+    const newCompletionStatus = {};
+    
+    groups.forEach(group => {
+      // Find all required fields in this group
+      const requiredFields = group.blocks.filter(
+        blockId => {
+          const block = blocks.find(b => b.id === blockId || b.id === blockId.id);
+          return block && block.type === 'field' && block.required;
+        }
+      );
+      
+      // Check if all required fields are filled
+      const allRequiredFieldsFilled = requiredFields.every(field => {
+        const block = blocks.find(b => b.id === field.id);
+        const value = data[block.id];
+        return value !== '' && value !== null && value !== undefined;
+      });
+      
+      newCompletionStatus[group.id] = allRequiredFieldsFilled;
+    });
+    
+    setGroupCompletionStatus(newCompletionStatus);
+  };
+  
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value, checked, type } = e.target;
     
-    setFormData({
+    const newFormData = {
       ...formData,
       [name]: type === 'checkbox' ? checked : value
-    });
+    };
+    
+    setFormData(newFormData);
     
     // Clear validation error when field is changed
     if (errors[name]) {
@@ -238,6 +434,36 @@ function FormViewer() {
         [name]: null
       });
     }
+    
+    // Update group completion status
+    if (form) {
+      updateGroupCompletionStatus(newFormData, form.processedGroups, form.flatBlocks);
+    }
+  };
+  
+  // Change tab
+  const handleTabChange = (event, newValue) => {
+    setActiveTab(newValue);
+    setMobileDrawerOpen(false);
+  };
+  
+  // Handle next group
+  const handleNextGroup = () => {
+    if (activeTab < tabGroups.length - 1) {
+      setActiveTab(activeTab + 1);
+    }
+  };
+  
+  // Handle previous group
+  const handlePrevGroup = () => {
+    if (activeTab > 0) {
+      setActiveTab(activeTab - 1);
+    }
+  };
+  
+  // Toggle mobile drawer
+  const toggleMobileDrawer = () => {
+    setMobileDrawerOpen(!mobileDrawerOpen);
   };
   
   // Validate form before submission
@@ -246,19 +472,19 @@ function FormViewer() {
     let isValid = true;
     
     // Check each required field
-    form.blocks.forEach(block => {
+    form.flatBlocks.forEach(block => {
       if (block.type === 'field' && block.required) {
-        const value = formData[block.title];
+        const value = formData[block.id];
         
         if (value === '' || value === null || value === undefined) {
-          newErrors[block.title] = 'This field is required';
+          newErrors[block.id] = 'This field is required';
           isValid = false;
         }
       } else if (block.type === 'signature') {
-        const value = formData[block.title];
+        const value = formData[block.id];
         
         if (!value) {
-          newErrors[block.title] = 'Signature is required';
+          newErrors[block.id] = 'Signature is required';
           isValid = false;
         }
       }
@@ -284,6 +510,7 @@ function FormViewer() {
         formTitle: form.title,
         formRevision: form.revision,
         userId: currentUser.uid,
+        userName: currentUser.displayName || currentUser.email,
         data: formData,
         status: 'draft',
         createdAt: serverTimestamp(),
@@ -318,6 +545,15 @@ function FormViewer() {
   const handleSubmitClick = () => {
     if (validateForm()) {
       setConfirmDialogOpen(true);
+    } else {
+      // Find the first group with errors
+      const groupWithErrors = tabGroups.findIndex(group => 
+        group.blocks.some(block => errors[block.id])
+      );
+      
+      if (groupWithErrors !== -1) {
+        setActiveTab(groupWithErrors);
+      }
     }
   };
   
@@ -399,13 +635,13 @@ function FormViewer() {
           <TextField
             fullWidth
             label={block.title}
-            name={block.title}
-            value={formData[block.title] || ''}
+            name={block.id}
+            value={formData[block.id] || ''}
             onChange={handleInputChange}
             variant="outlined"
             required={block.required}
-            error={Boolean(errors[block.title])}
-            helperText={errors[block.title] || block.description || ''}
+            error={Boolean(errors[block.id])}
+            helperText={errors[block.id] || block.description || ''}
             InputProps={{
               inputProps: {
                 minLength: block.validation?.minLength,
@@ -421,15 +657,15 @@ function FormViewer() {
           <TextField
             fullWidth
             label={block.title}
-            name={block.title}
-            value={formData[block.title] || ''}
+            name={block.id}
+            value={formData[block.id] || ''}
             onChange={handleInputChange}
             variant="outlined"
             multiline
             rows={4}
             required={block.required}
-            error={Boolean(errors[block.title])}
-            helperText={errors[block.title] || block.description || ''}
+            error={Boolean(errors[block.id])}
+            helperText={errors[block.id] || block.description || ''}
             InputProps={{
               inputProps: {
                 minLength: block.validation?.minLength,
@@ -445,13 +681,13 @@ function FormViewer() {
             fullWidth
             type="number"
             label={`${block.title}${block.validation?.units ? ` (${block.validation.units})` : ''}`}
-            name={block.title}
-            value={formData[block.title] || ''}
+            name={block.id}
+            value={formData[block.id] || ''}
             onChange={handleInputChange}
             variant="outlined"
             required={block.required}
-            error={Boolean(errors[block.title])}
-            helperText={errors[block.title] || block.description || ''}
+            error={Boolean(errors[block.id])}
+            helperText={errors[block.id] || block.description || ''}
             InputProps={{
               inputProps: {
                 min: block.validation?.minValue,
@@ -467,13 +703,13 @@ function FormViewer() {
             fullWidth
             type="date"
             label={block.title}
-            name={block.title}
-            value={formData[block.title] || ''}
+            name={block.id}
+            value={formData[block.id] || ''}
             onChange={handleInputChange}
             variant="outlined"
             required={block.required}
-            error={Boolean(errors[block.title])}
-            helperText={errors[block.title] || block.description || ''}
+            error={Boolean(errors[block.id])}
+            helperText={errors[block.id] || block.description || ''}
             InputLabelProps={{
               shrink: true,
             }}
@@ -484,22 +720,22 @@ function FormViewer() {
         return (
           <FormControl 
             component="fieldset" 
-            error={Boolean(errors[block.title])}
+            error={Boolean(errors[block.id])}
             required={block.required}
           >
             <FormControlLabel
               control={
                 <Checkbox
-                  checked={Boolean(formData[block.title])}
+                  checked={Boolean(formData[block.id])}
                   onChange={handleInputChange}
-                  name={block.title}
+                  name={block.id}
                   color="primary"
                 />
               }
               label={block.title}
             />
-            {(errors[block.title] || block.description) && (
-              <FormHelperText>{errors[block.title] || block.description}</FormHelperText>
+            {(errors[block.id] || block.description) && (
+              <FormHelperText>{errors[block.id] || block.description}</FormHelperText>
             )}
           </FormControl>
         );
@@ -508,14 +744,14 @@ function FormViewer() {
         return (
           <FormControl 
             component="fieldset" 
-            error={Boolean(errors[block.title])}
+            error={Boolean(errors[block.id])}
             required={block.required}
             className={classes.field}
           >
             <FormLabel component="legend">{block.title}</FormLabel>
             <RadioGroup
-              name={block.title}
-              value={formData[block.title] || ''}
+              name={block.id}
+              value={formData[block.id] || ''}
               onChange={handleInputChange}
             >
               {(block.options || []).map((option, index) => (
@@ -527,8 +763,8 @@ function FormViewer() {
                 />
               ))}
             </RadioGroup>
-            {(errors[block.title] || block.description) && (
-              <FormHelperText>{errors[block.title] || block.description}</FormHelperText>
+            {(errors[block.id] || block.description) && (
+              <FormHelperText>{errors[block.id] || block.description}</FormHelperText>
             )}
           </FormControl>
         );
@@ -538,14 +774,14 @@ function FormViewer() {
           <FormControl 
             fullWidth 
             variant="outlined"
-            error={Boolean(errors[block.title])}
+            error={Boolean(errors[block.id])}
             required={block.required}
             className={classes.field}
           >
             <InputLabel>{block.title}</InputLabel>
             <Select
-              name={block.title}
-              value={formData[block.title] || ''}
+              name={block.id}
+              value={formData[block.id] || ''}
               onChange={handleInputChange}
               label={block.title}
             >
@@ -558,8 +794,8 @@ function FormViewer() {
                 </MenuItem>
               ))}
             </Select>
-            {(errors[block.title] || block.description) && (
-              <FormHelperText>{errors[block.title] || block.description}</FormHelperText>
+            {(errors[block.id] || block.description) && (
+              <FormHelperText>{errors[block.id] || block.description}</FormHelperText>
             )}
           </FormControl>
         );
@@ -572,7 +808,7 @@ function FormViewer() {
   // Render a signature block
   const renderSignatureBlock = (block) => {
     const selectedSignature = signatures.find(
-      sig => sig.id === formData[block.title]
+      sig => sig.id === formData[block.id]
     );
     
     return (
@@ -590,13 +826,13 @@ function FormViewer() {
         <FormControl 
           fullWidth
           variant="outlined"
-          error={Boolean(errors[block.title])}
+          error={Boolean(errors[block.id])}
           required
         >
           <InputLabel>Select Signatory</InputLabel>
           <Select
-            name={block.title}
-            value={formData[block.title] || ''}
+            name={block.id}
+            value={formData[block.id] || ''}
             onChange={handleInputChange}
             label="Select Signatory"
           >
@@ -609,8 +845,8 @@ function FormViewer() {
               </MenuItem>
             ))}
           </Select>
-          {errors[block.title] && (
-            <FormHelperText>{errors[block.title]}</FormHelperText>
+          {errors[block.id] && (
+            <FormHelperText>{errors[block.id]}</FormHelperText>
           )}
         </FormControl>
         
@@ -641,60 +877,112 @@ function FormViewer() {
     );
   };
 
-  // Render a form block based on its type
-  const renderBlock = (block, index) => {
-    switch (block.type) {
-      case 'group':
-        return (
-          <div key={index} className={classes.groupBlock}>
-            <Typography variant="h6" gutterBottom>
-              {block.title}
+  // Mobile drawer content with group navigation
+  const navigationDrawerContent = (
+    <div>
+      <List>
+        {tabGroups.map((group, index) => (
+          <ListItem
+            button
+            key={group.id}
+            onClick={() => handleTabChange(null, index)}
+            className={activeTab === index ? classes.activeTab : ''}
+          >
+            <ListItemIcon>
+              {groupCompletionStatus[group.id] ? (
+                <CompleteIcon className={classes.completeIcon} />
+              ) : (
+                <IncompleteIcon className={classes.incompleteIcon} />
+              )}
+            </ListItemIcon>
+            <ListItemText primary={group.title} />
+          </ListItem>
+        ))}
+      </List>
+    </div>
+  );
+  
+  // Render the form content
+  const renderFormContent = () => {
+    if (!form || !tabGroups || tabGroups.length === 0) {
+      return <Typography>No form content available.</Typography>;
+    }
+    
+    return (
+      <div>
+        {/* Mobile Stepper */}
+        <Hidden mdUp>
+          <div className={classes.stepperContainer}>
+            <Stepper activeStep={activeTab} alternativeLabel>
+              {tabGroups.map((group) => (
+                <Step key={group.id}>
+                  <StepLabel>{group.title}</StepLabel>
+                </Step>
+              ))}
+            </Stepper>
+          </div>
+        </Hidden>
+        
+        {/* Tab Content */}
+        {tabGroups.map((group, index) => (
+          <TabPanel value={activeTab} index={index} key={group.id} className={classes.tabPanel}>
+            <Typography variant="h5" gutterBottom>
+              {group.title}
             </Typography>
             
-            {block.description && (
-              <Typography variant="body2" gutterBottom>
-                {block.description}
+            {group.description && (
+              <Typography variant="body2" paragraph>
+                {group.description}
               </Typography>
             )}
             
             <Divider className={classes.divider} />
             
-            {/* Here you would render nested blocks within the group */}
-          </div>
-        );
-        
-      case 'field':
-        return (
-          <div key={index} className={classes.field}>
-            {renderField(block)}
-          </div>
-        );
-        
-      case 'signature':
-        return (
-          <div key={index} className={classes.field}>
-            {renderSignatureBlock(block)}
-          </div>
-        );
-        
-      default:
-        return null;
-    }
+            {/* Render blocks in this group */}
+            {group.blocks.map((block) => (
+              <div key={block.id} className={classes.field}>
+                {block.type === 'field' && renderField(block)}
+                {block.type === 'signature' && renderSignatureBlock(block)}
+              </div>
+            ))}
+            
+            {/* Navigation buttons */}
+            <div className={classes.navigationButtons}>
+              <Button
+                color="primary"
+                startIcon={<PrevIcon />}
+                onClick={handlePrevGroup}
+                disabled={index === 0}
+              >
+                Previous
+              </Button>
+              <Button
+                color="primary"
+                endIcon={<NextIcon />}
+                onClick={handleNextGroup}
+                disabled={index === tabGroups.length - 1}
+              >
+                Next
+              </Button>
+            </div>
+          </TabPanel>
+        ))}
+      </div>
+    );
   };
   
   if (loading) {
     return (
-      <Container>
-        <div className={classes.appBarSpacer} />
-        <Typography variant="h6">Loading form...</Typography>
+      <Container className={classes.container} style={{ textAlign: 'center', paddingTop: '40px' }}>
+        <CircularProgress />
+        <Typography variant="h6" style={{ marginTop: '20px' }}>Loading form...</Typography>
       </Container>
     );
   }
   
   if (error) {
     return (
-      <Container>
-        <div className={classes.appBarSpacer} />
+      <Container className={classes.container}>
         <Typography color="error" variant="h6">{error}</Typography>
         <Button
           variant="contained"
@@ -709,56 +997,71 @@ function FormViewer() {
   }
   
   return (
-    <>
-      <AppBar position="fixed">
-        <Toolbar>
-          <IconButton
-            edge="start"
-            color="inherit"
-            onClick={() => navigate('/dashboard')}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" className={classes.title}>
-            Form Completion
+    <div>
+      {/* Form Header */}
+      <Paper className={classes.paper}>
+        <div className={classes.formHeader}>
+          <Typography variant="h4" gutterBottom>
+            {form?.title}
             {isDraft && (
               <span className={classes.draftLabel}>DRAFT</span>
             )}
           </Typography>
-        </Toolbar>
-      </AppBar>
+          
+          {form?.description && (
+            <Typography variant="body1">
+              {form.description}
+            </Typography>
+          )}
+          
+          <Typography variant="subtitle2" color="textSecondary">
+            Revision: {form?.revision || '1.0'}
+          </Typography>
+        </div>
+      </Paper>
 
-      <div className={classes.appBarSpacer} />
-      
-      <Container className={classes.container}>
-        <Paper className={classes.paper}>
-          <div className={classes.formHeader}>
-            <Typography variant="h4" gutterBottom>
-              {form.title}
-            </Typography>
-            
-            {form.description && (
-              <Typography variant="body1">
-                {form.description}
-              </Typography>
-            )}
-            
-            <Typography variant="subtitle2" color="textSecondary">
-              Revision: {form.revision || '1.0'}
-            </Typography>
-          </div>
+      {/* Main Content with Navigation */}
+      <div style={{ display: 'flex' }}>
+        {/* Desktop Navigation Drawer */}
+        <Hidden smDown>
+          <Drawer
+            className={classes.drawer}
+            variant="permanent"
+            classes={{
+              paper: classes.drawerPaper,
+            }}
+            anchor="left"
+          >
+            {navigationDrawerContent}
+          </Drawer>
+        </Hidden>
+        
+        {/* Mobile Navigation Drawer */}
+        <Hidden mdUp>
+          <Drawer
+            variant="temporary"
+            open={mobileDrawerOpen}
+            onClose={toggleMobileDrawer}
+            classes={{
+              paper: classes.drawerPaper,
+            }}
+            ModalProps={{
+              keepMounted: true, // Better mobile performance
+            }}
+          >
+            {navigationDrawerContent}
+          </Drawer>
+        </Hidden>
+        
+        {/* Main Content */}
+        <Container className={classes.content}>
+          {renderFormContent()}
           
-          <Divider />
-          
-          <div>
-            {form.blocks.map((block, index) => renderBlock(block, index))}
-          </div>
-          
-          <div className={classes.buttonsContainer}>
+          {/* Bottom Actions */}
+          <Paper className={classes.bottomButtons}>
             <Button
               variant="outlined"
               color="primary"
-              size="large"
               startIcon={<SaveIcon />}
               onClick={handleSaveDraft}
               disabled={savingDraft}
@@ -769,16 +1072,15 @@ function FormViewer() {
             <Button
               variant="contained"
               color="primary"
-              size="large"
               startIcon={<SendIcon />}
               onClick={handleSubmitClick}
               disabled={submitting}
             >
               {submitting ? 'Submitting...' : 'Submit Form'}
             </Button>
-          </div>
-        </Paper>
-      </Container>
+          </Paper>
+        </Container>
+      </div>
       
       {/* Confirmation Dialog */}
       <Dialog
@@ -829,7 +1131,7 @@ function FormViewer() {
           Form draft saved successfully. You can continue editing later.
         </Alert>
       </Snackbar>
-    </>
+    </div>
   );
 }
 

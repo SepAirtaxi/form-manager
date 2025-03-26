@@ -78,7 +78,8 @@ function BlockEditor({ open, block, onSave, onClose }) {
       maxValue: '',
       units: ''
     },
-    newOption: '' // Temporary state for adding options
+    newOption: '', // Temporary state for adding options
+    id: '' // Unique ID for the block
   });
   
   // Update form when block changes
@@ -99,7 +100,8 @@ function BlockEditor({ open, block, onSave, onClose }) {
           maxValue: '',
           units: ''
         },
-        newOption: ''
+        newOption: '',
+        id: block.id || ''
       });
     }
   }, [block]);
@@ -153,6 +155,7 @@ function BlockEditor({ open, block, onSave, onClose }) {
   const handleSave = () => {
     // Create a clean block object to save
     const blockToSave = {
+      id: formData.id,
       type: formData.type,
       title: formData.title,
       description: formData.description
@@ -196,6 +199,9 @@ function BlockEditor({ open, block, onSave, onClose }) {
           }
         }
       }
+    } else if (formData.type === 'group') {
+      // For group blocks, initialize an empty children array if it doesn't exist
+      blockToSave.children = block && block.children ? block.children : [];
     } else if (formData.type === 'signature') {
       blockToSave.includeDate = true; // Default behavior
     }
@@ -396,6 +402,15 @@ function BlockEditor({ open, block, onSave, onClose }) {
               )}
             </div>
           </>
+        )}
+        
+        {/* Group Block Options */}
+        {formData.type === 'group' && (
+          <div className={classes.formSection}>
+            <Typography variant="subtitle2" gutterBottom>
+              This group will act as a container for related fields. You can add fields to this group after creating it.
+            </Typography>
+          </div>
         )}
         
         {/* Signature Block Options */}
