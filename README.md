@@ -1,70 +1,79 @@
-# Getting Started with Create React App
+# Copenhagen AirTaxi Form Manager (CATFM)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A web-based application designed for aircraft maintenance form management at Copenhagen AirTaxi / CAT Flyservice.
 
-## Available Scripts
+## Project Overview
 
-In the project directory, you can run:
+The Form Manager is a comprehensive solution for creating, managing, completing, and submitting structured forms within an aircraft maintenance environment. The application features:
 
-### `npm start`
+- **Admin Backend**: For creating, editing, and managing form templates with revision control
+- **User Frontend**: For certifying staff to complete forms on tablets or PCs in the workshop environment
+- **PDF Generation**: Outputs completed forms as professionally formatted PDFs
+- **Email Integration**: Automatically emails completed forms to management
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+## Technical Architecture
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+- **Frontend**: React.js with Material-UI components
+- **Backend**: Firebase (Authentication, Firestore, Storage)
+- **PDF Generation**: jsPDF library
+- **Form Structure**: Block-based system (Group, Field, and Signature blocks)
 
-### `npm test`
+## Current Development Status
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+This project is currently in early development stage. The foundational code has been written for all key components, but we're still working on:
 
-### `npm run build`
+1. Setting up the development environment
+2. Resolving dependency and syntax issues
+3. Connecting to Firebase services
+4. Testing core functionality
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+## Project Structure
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+- **src/** - Root source directory
+  - **components/** - UI components
+    - **admin/** - Admin interface components
+      - AdminDashboard.js
+      - FormEditor.js
+      - BlockEditor.js
+      - SignatureManager.js
+      - CompanySettings.js
+    - **user/** - User interface components
+      - FormList.js
+      - FormViewer.js
+    - **common/** - Shared components
+    - **auth/** - Authentication components
+      - Login.js
+      - ProtectedRoute.js
+  - **contexts/** - React contexts
+    - AuthContext.js
+  - **services/** - Firebase and utility services
+    - formService.js
+    - pdfService.js
+    - emailService.js
+  - **firebase.js** - Firebase configuration
+  - **App.js** - Main application component
+  - **routes.js** - Application routing
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Core Functionality
 
-### `npm run eject`
+- **Form Creation**: Build forms with hierarchical blocks (sections, fields, signatures)
+- **Form Management**: Version control with major/minor revisions
+- **Signature Management**: Manage authorized signatories with signature images
+- **Form Completion**: User-friendly interface for completing forms in the workshop
+- **PDF Output**: Professional formatting of completed forms
+- **Email Delivery**: Automatic delivery to management
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+## Setup Instructions (Coming Soon)
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Detailed setup instructions will be provided once the development environment issues are resolved.
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+## Future Features
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+- Offline functionality for workshop environments
+- Form submission history and reporting
+- More field types and validation options
+- Mobile optimizations for tablet usage
 
-## Learn More
+## About
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Developed for Copenhagen AirTaxi / CAT Flyservice to streamline aircraft maintenance documentation processes and ensure regulatory compliance.
