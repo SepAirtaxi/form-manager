@@ -1,6 +1,5 @@
 // src/components/admin/SignatureManager.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -11,9 +10,6 @@ import {
   Typography,
   TextField,
   Button,
-  IconButton,
-  AppBar,
-  Toolbar,
   Grid,
   Card,
   CardContent,
@@ -24,20 +20,16 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  Fab,
   makeStyles
 } from '@material-ui/core';
 import {
-  ArrowBack as ArrowBackIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
-  appBarSpacer: theme.mixins.toolbar,
-  title: {
-    flexGrow: 1,
-  },
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
@@ -66,12 +58,19 @@ const useStyles = makeStyles((theme) => ({
     maxWidth: '100%',
     maxHeight: '150px',
     marginTop: theme.spacing(2),
+  },
+  fab: {
+    position: 'fixed',
+    bottom: theme.spacing(2),
+    right: theme.spacing(2),
+  },
+  title: {
+    marginBottom: theme.spacing(3),
   }
 }));
 
 function SignatureManager() {
   const classes = useStyles();
-  const navigate = useNavigate();
   
   const [signatures, setSignatures] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -307,102 +306,86 @@ function SignatureManager() {
 
   // Render function
   return (
-    <>
-      <AppBar position="fixed">
-        <Toolbar>
-          <IconButton 
-            edge="start" 
-            color="inherit" 
-            onClick={() => navigate('/admin/dashboard')}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" className={classes.title}>
-            Signature Management
-          </Typography>
-          <Button 
-            color="inherit" 
-            startIcon={<AddIcon />}
-            onClick={handleAddClick}
-          >
-            Add Signature
-          </Button>
-        </Toolbar>
-      </AppBar>
-
-      <div className={classes.appBarSpacer} />
+    <Container className={classes.container}>
+      <Typography variant="h4" gutterBottom className={classes.title}>
+        Authorized Signatories
+      </Typography>
       
-      <Container className={classes.container}>
-        <Typography variant="h4" gutterBottom>
-          Authorized Signatories
+      <Typography variant="body1" paragraph>
+        Manage the list of personnel authorized to sign forms. Signatures will be available for selection when completing forms.
+      </Typography>
+      
+      {error && (
+        <Typography color="error" paragraph>
+          {error}
         </Typography>
-        
-        <Typography variant="body1" paragraph>
-          Manage the list of personnel authorized to sign forms. Signatures will be available for selection when completing forms.
-        </Typography>
-        
-        {error && (
-          <Typography color="error" paragraph>
-            {error}
-          </Typography>
-        )}
-        
-        {loading ? (
-          <Typography>Loading signatures...</Typography>
-        ) : (
-          <Grid container spacing={3}>
-            {signatures.length === 0 ? (
-              <Grid item xs={12}>
-                <Paper style={{ padding: '16px', textAlign: 'center' }}>
-                  <Typography color="textSecondary">
-                    No signatures found. Click "Add Signature" to create one.
-                  </Typography>
-                </Paper>
+      )}
+      
+      {loading ? (
+        <Typography>Loading signatures...</Typography>
+      ) : (
+        <Grid container spacing={3}>
+          {signatures.length === 0 ? (
+            <Grid item xs={12}>
+              <Paper style={{ padding: '16px', textAlign: 'center' }}>
+                <Typography color="textSecondary">
+                  No signatures found. Click "Add Signature" to create one.
+                </Typography>
+              </Paper>
+            </Grid>
+          ) : (
+            signatures.map((signature) => (
+              <Grid item key={signature.id} xs={12} sm={6} md={4}>
+                <Card className={classes.card}>
+                  {signature.signatureBase64 && (
+                    <CardMedia
+                      className={classes.cardMedia}
+                      image={signature.signatureBase64}
+                      title={`${signature.name}'s signature`}
+                    />
+                  )}
+                  <CardContent className={classes.cardContent}>
+                    <Typography variant="h6" className={classes.signatureTitle}>
+                      {signature.name}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      {signature.title}
+                    </Typography>
+                  </CardContent>
+                  <CardActions>
+                    <Button 
+                      size="small" 
+                      color="primary"
+                      startIcon={<EditIcon />}
+                      onClick={() => handleEditClick(signature)}
+                    >
+                      Edit
+                    </Button>
+                    <Button 
+                      size="small" 
+                      color="secondary"
+                      startIcon={<DeleteIcon />}
+                      onClick={() => handleDeleteClick(signature)}
+                    >
+                      Delete
+                    </Button>
+                  </CardActions>
+                </Card>
               </Grid>
-            ) : (
-              signatures.map((signature) => (
-                <Grid item key={signature.id} xs={12} sm={6} md={4}>
-                  <Card className={classes.card}>
-                    {signature.signatureBase64 && (
-                      <CardMedia
-                        className={classes.cardMedia}
-                        image={signature.signatureBase64}
-                        title={`${signature.name}'s signature`}
-                      />
-                    )}
-                    <CardContent className={classes.cardContent}>
-                      <Typography variant="h6" className={classes.signatureTitle}>
-                        {signature.name}
-                      </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        {signature.title}
-                      </Typography>
-                    </CardContent>
-                    <CardActions>
-                      <Button 
-                        size="small" 
-                        color="primary"
-                        startIcon={<EditIcon />}
-                        onClick={() => handleEditClick(signature)}
-                      >
-                        Edit
-                      </Button>
-                      <Button 
-                        size="small" 
-                        color="secondary"
-                        startIcon={<DeleteIcon />}
-                        onClick={() => handleDeleteClick(signature)}
-                      >
-                        Delete
-                      </Button>
-                    </CardActions>
-                  </Card>
-                </Grid>
-              ))
-            )}
-          </Grid>
-        )}
-      </Container>
+            ))
+          )}
+        </Grid>
+      )}
+      
+      {/* Floating action button to add new signature */}
+      <Fab 
+        color="primary" 
+        className={classes.fab}
+        onClick={handleAddClick}
+        aria-label="add signature"
+      >
+        <AddIcon />
+      </Fab>
       
       {/* Add/Edit Signature Dialog */}
       <Dialog open={dialogOpen} onClose={handleClose} maxWidth="sm" fullWidth>
@@ -498,7 +481,7 @@ function SignatureManager() {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Container>
   );
 }
 

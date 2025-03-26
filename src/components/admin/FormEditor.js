@@ -12,9 +12,6 @@ import {
   Typography,
   TextField,
   Button,
-  AppBar,
-  Toolbar,
-  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
@@ -36,7 +33,6 @@ import {
   makeStyles
 } from '@material-ui/core';
 import {
-  ArrowBack as ArrowBackIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -49,9 +45,9 @@ const useStyles = makeStyles((theme) => ({
   root: {
     flexGrow: 1,
   },
-  appBarSpacer: theme.mixins.toolbar,
-  title: {
-    flexGrow: 1,
+  container: {
+    paddingTop: theme.spacing(4),
+    paddingBottom: theme.spacing(4),
   },
   paper: {
     padding: theme.spacing(3),
@@ -87,6 +83,14 @@ const useStyles = makeStyles((theme) => ({
     padding: theme.spacing(2),
     backgroundColor: theme.palette.background.default,
     borderRadius: theme.shape.borderRadius,
+  },
+  formTitle: {
+    marginBottom: theme.spacing(3),
+  },
+  actionButtons: {
+    marginBottom: theme.spacing(3),
+    display: 'flex',
+    gap: theme.spacing(2),
   }
 }));
 
@@ -308,8 +312,7 @@ function FormEditor() {
   
   if (loading) {
     return (
-      <Container>
-        <div className={classes.appBarSpacer} />
+      <Container className={classes.container}>
         <Typography variant="h6">Loading...</Typography>
       </Container>
     );
@@ -317,38 +320,36 @@ function FormEditor() {
   
   return (
     <div className={classes.root}>
-      <AppBar position="fixed">
-        <Toolbar>
-          <IconButton 
-            edge="start" 
-            color="inherit" 
-            onClick={() => navigate('/admin')}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" className={classes.title}>
-            {isEditMode ? 'Edit Form' : 'Create New Form'}
-          </Typography>
+      <Container className={classes.container}>
+        <Typography variant="h4" className={classes.formTitle}>
+          {isEditMode ? 'Edit Form' : 'Create New Form'}
+        </Typography>
+        
+        <div className={classes.actionButtons}>
           <Button 
-            color="inherit" 
+            variant="contained" 
+            color="primary" 
             startIcon={<SaveIcon />}
             onClick={handleSaveDraft}
           >
             Save Draft
           </Button>
           <Button 
-            color="inherit" 
+            variant="contained" 
+            color="secondary" 
             startIcon={<PublishIcon />}
             onClick={handlePublishClick}
           >
             Publish
           </Button>
-        </Toolbar>
-      </AppBar>
+          <Button 
+            variant="outlined"
+            onClick={() => navigate('/admin/dashboard')}
+          >
+            Cancel
+          </Button>
+        </div>
 
-      <div className={classes.appBarSpacer} />
-      
-      <Container>
         {error && (
           <Typography color="error" component="div" className={classes.formSection}>
             {error}

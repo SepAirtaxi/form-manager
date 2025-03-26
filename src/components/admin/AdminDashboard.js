@@ -18,9 +18,6 @@ import {
   TableHead,
   TableRow,
   IconButton,
-  Toolbar,
-  AppBar,
-  makeStyles,
   Dialog,
   DialogActions,
   DialogContent,
@@ -30,25 +27,21 @@ import {
   Card,
   CardContent,
   CardActions,
-  Chip
+  Chip,
+  makeStyles
 } from '@material-ui/core';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   FileCopy as DuplicateIcon,
-  ExitToApp as LogoutIcon,
-  Person as UserIcon,
-  Settings as SettingsIcon,
   Create as CreateIcon,
-  PanTool as SignatureIcon
+  PanTool as SignatureIcon,
+  Settings as SettingsIcon,
+  Person as UserIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
-  title: {
-    flexGrow: 1,
-  },
-  appBarSpacer: theme.mixins.toolbar,
   content: {
     flexGrow: 1,
     padding: theme.spacing(3),
@@ -93,7 +86,7 @@ function AdminDashboard() {
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [formToDelete, setFormToDelete] = useState(null);
-  const { currentUser, logout, userRole, hasRole } = useAuth();
+  const { currentUser, userRole, hasRole } = useAuth();
   const navigate = useNavigate();
 
   // Load forms on component mount
@@ -151,105 +144,67 @@ function AdminDashboard() {
     console.log('Duplicate form', form.id);
   };
 
-  // Handle logout
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/login');
-    } catch (err) {
-      setError('Failed to log out');
-      console.error(err);
-    }
-  };
-
   return (
-    <>
-      <AppBar position="fixed">
-        <Toolbar>
-          <Typography variant="h6" className={classes.title}>
-            Copenhagen AirTaxi - Form Manager
-          </Typography>
-          {/* Only show these buttons if user has appropriate role */}
-          {hasRole(['manager', 'admin']) && (
-            <>
-              <Button
-                color="inherit"
-                component={Link}
-                to="/admin/signatures"
-              >
-                Manage Signatures
-              </Button>
-              <Button
-                color="inherit"
-                component={Link}
-                to="/admin/company-settings"
-              >
-                Company Settings
-              </Button>
-            </>
-          )}
-          {/* Only show User Management for admin */}
-          {hasRole(['admin']) && (
-            <Button
-              color="inherit"
-              component={Link}
-              to="/admin/users"
-            >
-              User Management
-            </Button>
-          )}
-          <Button
-            color="inherit"
-            component={Link}
-            to="/dashboard"
-          >
-            User Dashboard
-          </Button>
-          <Button
-            color="inherit"
-            onClick={handleLogout}
-            startIcon={<LogoutIcon />}
-          >
-            Logout
-          </Button>
-        </Toolbar>
-      </AppBar>
-
-      <div className={classes.appBarSpacer} />
-
-      <Container className={classes.content}>
-        <Paper className={classes.welcomeSection}>
-          <Typography variant="h4" gutterBottom>
-            Admin Dashboard
-          </Typography>
-          <Typography variant="body1">
-            Welcome to the administrative dashboard, {currentUser?.displayName || 'User'}. 
-            Your role is: <strong style={{ textTransform: 'capitalize' }}>{userRole}</strong>
-          </Typography>
-        </Paper>
-
-        {error && (
-          <Typography color="error">
-            {error}
-          </Typography>
-        )}
-
-        {/* Admin Tools Section */}
-        <Typography variant="h5" gutterBottom style={{ marginTop: '24px' }}>
-          Admin Tools
+    <Container className={classes.content}>
+      <Paper className={classes.welcomeSection}>
+        <Typography variant="h4" gutterBottom>
+          Admin Dashboard
         </Typography>
+        <Typography variant="body1">
+          Welcome to the administrative dashboard, {currentUser?.displayName || 'User'}. 
+          Your role is: <strong style={{ textTransform: 'capitalize' }}>{userRole}</strong>
+        </Typography>
+      </Paper>
+
+      {error && (
+        <Typography color="error">
+          {error}
+        </Typography>
+      )}
+
+      {/* Admin Tools Section */}
+      <Typography variant="h5" gutterBottom style={{ marginTop: '24px' }}>
+        Admin Tools
+      </Typography>
+      
+      <Grid container spacing={3} style={{ marginBottom: '32px' }}>
+        {/* Form Creation Card */}
+        <Grid item xs={12} sm={6} md={3}>
+          <Card className={classes.card}>
+            <CardContent className={classes.cardContent}>
+              <CreateIcon className={classes.cardIcon} color="primary" />
+              <Typography className={classes.cardTitle} gutterBottom>
+                Form Creator
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Create new forms for your organization.
+              </Typography>
+            </CardContent>
+            <CardActions>
+              <Button 
+                size="small" 
+                color="primary"
+                component={Link}
+                to="/admin/form/new"
+                startIcon={<AddIcon />}
+              >
+                Create New Form
+              </Button>
+            </CardActions>
+          </Card>
+        </Grid>
         
-        <Grid container spacing={3} style={{ marginBottom: '32px' }}>
-          {/* Form Creation Card */}
+        {/* Signature Manager Card - only for manager and admin */}
+        {hasRole(['manager', 'admin']) && (
           <Grid item xs={12} sm={6} md={3}>
             <Card className={classes.card}>
               <CardContent className={classes.cardContent}>
-                <CreateIcon className={classes.cardIcon} color="primary" />
+                <SignatureIcon className={classes.cardIcon} color="primary" />
                 <Typography className={classes.cardTitle} gutterBottom>
-                  Form Creator
+                  Signature Manager
                 </Typography>
                 <Typography variant="body2" color="textSecondary">
-                  Create new forms for your organization.
+                  Manage authorized signatories.
                 </Typography>
               </CardContent>
               <CardActions>
@@ -257,171 +212,143 @@ function AdminDashboard() {
                   size="small" 
                   color="primary"
                   component={Link}
-                  to="/admin/form/new"
-                  startIcon={<AddIcon />}
+                  to="/admin/signatures"
                 >
-                  Create New Form
+                  Manage Signatures
                 </Button>
               </CardActions>
             </Card>
           </Grid>
-          
-          {/* Signature Manager Card - only for manager and admin */}
-          {hasRole(['manager', 'admin']) && (
-            <Grid item xs={12} sm={6} md={3}>
-              <Card className={classes.card}>
-                <CardContent className={classes.cardContent}>
-                  <SignatureIcon className={classes.cardIcon} color="primary" />
-                  <Typography className={classes.cardTitle} gutterBottom>
-                    Signature Manager
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Manage authorized signatories.
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    color="primary"
-                    component={Link}
-                    to="/admin/signatures"
-                  >
-                    Manage Signatures
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-          )}
-          
-          {/* Company Settings Card - only for manager and admin */}
-          {hasRole(['manager', 'admin']) && (
-            <Grid item xs={12} sm={6} md={3}>
-              <Card className={classes.card}>
-                <CardContent className={classes.cardContent}>
-                  <SettingsIcon className={classes.cardIcon} color="primary" />
-                  <Typography className={classes.cardTitle} gutterBottom>
-                    Company Settings
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Configure company information.
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    color="primary"
-                    component={Link}
-                    to="/admin/company-settings"
-                  >
-                    Company Settings
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-          )}
-          
-          {/* User Management Card - only for admin */}
-          {hasRole(['admin']) && (
-            <Grid item xs={12} sm={6} md={3}>
-              <Card className={classes.card}>
-                <CardContent className={classes.cardContent}>
-                  <UserIcon className={classes.cardIcon} color="primary" />
-                  <Typography className={classes.cardTitle} gutterBottom>
-                    User Management
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    Manage users and access control.
-                  </Typography>
-                </CardContent>
-                <CardActions>
-                  <Button 
-                    size="small" 
-                    color="primary"
-                    component={Link}
-                    to="/admin/users"
-                  >
-                    Manage Users
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-          )}
-        </Grid>
+        )}
+        
+        {/* Company Settings Card - only for manager and admin */}
+        {hasRole(['manager', 'admin']) && (
+          <Grid item xs={12} sm={6} md={3}>
+            <Card className={classes.card}>
+              <CardContent className={classes.cardContent}>
+                <SettingsIcon className={classes.cardIcon} color="primary" />
+                <Typography className={classes.cardTitle} gutterBottom>
+                  Company Settings
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Configure company information.
+                </Typography>
+              </CardContent>
+              <CardActions>
+                <Button 
+                  size="small" 
+                  color="primary"
+                  component={Link}
+                  to="/admin/company-settings"
+                >
+                  Company Settings
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
+        )}
+        
+        {/* User Management Card - only for admin */}
+        {hasRole(['admin']) && (
+          <Grid item xs={12} sm={6} md={3}>
+            <Card className={classes.card}>
+              <CardContent className={classes.cardContent}>
+                <UserIcon className={classes.cardIcon} color="primary" />
+                <Typography className={classes.cardTitle} gutterBottom>
+                  User Management
+                </Typography>
+                <Typography variant="body2" color="textSecondary">
+                  Manage users and access control.
+                </Typography>
+              </CardContent>
+              <CardActions>
+                <Button 
+                  size="small" 
+                  color="primary"
+                  component={Link}
+                  to="/admin/users"
+                >
+                  Manage Users
+                </Button>
+              </CardActions>
+            </Card>
+          </Grid>
+        )}
+      </Grid>
 
-        <Typography variant="h5" gutterBottom>
-          Form Management
-        </Typography>
+      <Typography variant="h5" gutterBottom>
+        Form Management
+      </Typography>
 
-        <TableContainer component={Paper} className={classes.tableContainer}>
-          <Table aria-label="forms table">
-            <TableHead>
+      <TableContainer component={Paper} className={classes.tableContainer}>
+        <Table aria-label="forms table">
+          <TableHead>
+            <TableRow>
+              <TableCell>Form Title</TableCell>
+              <TableCell>Revision</TableCell>
+              <TableCell>Department</TableCell>
+              <TableCell>Last Modified</TableCell>
+              <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {loading ? (
               <TableRow>
-                <TableCell>Form Title</TableCell>
-                <TableCell>Revision</TableCell>
-                <TableCell>Department</TableCell>
-                <TableCell>Last Modified</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell colSpan={6} align="center">
+                  Loading...
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">
-                    Loading...
+            ) : forms.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  No forms found. Create your first form!
+                </TableCell>
+              </TableRow>
+            ) : (
+              forms.map((form) => (
+                <TableRow key={form.id}>
+                  <TableCell component="th" scope="row">
+                    {form.title}
+                    {form.hasDraft && (
+                      <Chip size="small" label="DRAFT" className={classes.draftChip} />
+                    )}
+                  </TableCell>
+                  <TableCell>{form.revision || '1.0'}</TableCell>
+                  <TableCell>{form.department || 'General'}</TableCell>
+                  <TableCell>
+                    {form.updatedAt ? new Date(form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
+                  </TableCell>
+                  <TableCell>
+                    {form.published ? 'Published' : 'Draft'}
+                  </TableCell>
+                  <TableCell align="right">
+                    <IconButton
+                      aria-label="edit"
+                      component={Link}
+                      to={`/admin/form/edit/${form.id}`}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      aria-label="duplicate"
+                      onClick={() => handleDuplicate(form)}
+                    >
+                      <DuplicateIcon />
+                    </IconButton>
+                    <IconButton
+                      aria-label="delete"
+                      onClick={() => handleDeleteClick(form)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
                   </TableCell>
                 </TableRow>
-              ) : forms.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} align="center">
-                    No forms found. Create your first form!
-                  </TableCell>
-                </TableRow>
-              ) : (
-                forms.map((form) => (
-                  <TableRow key={form.id}>
-                    <TableCell component="th" scope="row">
-                      {form.title}
-                      {form.hasDraft && (
-                        <Chip size="small" label="DRAFT" className={classes.draftChip} />
-                      )}
-                    </TableCell>
-                    <TableCell>{form.revision || '1.0'}</TableCell>
-                    <TableCell>{form.department || 'General'}</TableCell>
-                    <TableCell>
-                      {form.updatedAt ? new Date(form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
-                    </TableCell>
-                    <TableCell>
-                      {form.published ? 'Published' : 'Draft'}
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton
-                        aria-label="edit"
-                        component={Link}
-                        to={`/admin/form/edit/${form.id}`}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        aria-label="duplicate"
-                        onClick={() => handleDuplicate(form)}
-                      >
-                        <DuplicateIcon />
-                      </IconButton>
-                      <IconButton
-                        aria-label="delete"
-                        onClick={() => handleDeleteClick(form)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Container>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TableContainer>
 
       {/* Delete Confirmation Dialog */}
       <Dialog
@@ -447,7 +374,7 @@ function AdminDashboard() {
           </Button>
         </DialogActions>
       </Dialog>
-    </>
+    </Container>
   );
 }
 

@@ -18,9 +18,6 @@ import {
   TableHead,
   TableRow,
   IconButton,
-  Toolbar,
-  AppBar,
-  makeStyles,
   Dialog,
   DialogActions,
   DialogContent,
@@ -31,28 +28,21 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Snackbar
+  Snackbar,
+  Fab,
+  makeStyles
 } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon,
-  ArrowBack as ArrowBackIcon,
-  Save as SaveIcon
+  Delete as DeleteIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
-  title: {
-    flexGrow: 1,
-  },
-  appBarSpacer: theme.mixins.toolbar,
-  content: {
-    flexGrow: 1,
-    padding: theme.spacing(3),
-  },
-  button: {
-    margin: theme.spacing(1),
+  container: {
+    paddingTop: theme.spacing(4),
+    paddingBottom: theme.spacing(4),
   },
   tableContainer: {
     marginTop: theme.spacing(3),
@@ -64,6 +54,14 @@ const useStyles = makeStyles((theme) => ({
     '& > *': {
       margin: theme.spacing(1),
     },
+  },
+  title: {
+    marginBottom: theme.spacing(3),
+  },
+  fab: {
+    position: 'fixed',
+    bottom: theme.spacing(2),
+    right: theme.spacing(2),
   },
 }));
 
@@ -256,89 +254,73 @@ function UserManager() {
   };
   
   return (
-    <>
-      <AppBar position="fixed">
-        <Toolbar>
-          <IconButton 
-            edge="start" 
-            color="inherit" 
-            onClick={() => navigate('/admin/dashboard')}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" className={classes.title}>
-            User Management
-          </Typography>
-          <Button
-            color="inherit"
-            startIcon={<AddIcon />}
-            onClick={handleAddClick}
-          >
-            Add User
-          </Button>
-        </Toolbar>
-      </AppBar>
-
-      <div className={classes.appBarSpacer} />
+    <Container className={classes.container}>
+      <Typography variant="h4" component="h1" gutterBottom className={classes.title}>
+        User Management
+      </Typography>
       
-      <Container className={classes.content}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          User Management
-        </Typography>
-        
-        <Paper className={classes.tableContainer}>
-          <TableContainer>
-            <Table>
-              <TableHead>
+      <Paper className={classes.tableContainer}>
+        <TableContainer>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Name</TableCell>
+                <TableCell>Email</TableCell>
+                <TableCell>Role</TableCell>
+                <TableCell align="right">Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {loading ? (
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Email</TableCell>
-                  <TableCell>Role</TableCell>
-                  <TableCell align="right">Actions</TableCell>
+                  <TableCell colSpan={4} align="center">
+                    Loading...
+                  </TableCell>
                 </TableRow>
-              </TableHead>
-              <TableBody>
-                {loading ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center">
-                      Loading...
+              ) : users.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} align="center">
+                    No users found.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                users.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell>{user.displayName}</TableCell>
+                    <TableCell>{user.email}</TableCell>
+                    <TableCell className={classes.roleCell}>{user.role}</TableCell>
+                    <TableCell align="right">
+                      <IconButton
+                        aria-label="edit"
+                        onClick={() => handleEditClick(user)}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      <IconButton
+                        aria-label="delete"
+                        onClick={() => handleDeleteClick(user)}
+                        disabled={userRole !== 'admin'}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
                     </TableCell>
                   </TableRow>
-                ) : users.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} align="center">
-                      No users found.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  users.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell>{user.displayName}</TableCell>
-                      <TableCell>{user.email}</TableCell>
-                      <TableCell className={classes.roleCell}>{user.role}</TableCell>
-                      <TableCell align="right">
-                        <IconButton
-                          aria-label="edit"
-                          onClick={() => handleEditClick(user)}
-                        >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton
-                          aria-label="delete"
-                          onClick={() => handleDeleteClick(user)}
-                          disabled={userRole !== 'admin'}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      </Container>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </Paper>
+
+      {/* Floating action button to add user */}
+      <Fab
+        color="primary"
+        className={classes.fab}
+        onClick={handleAddClick}
+        aria-label="add user"
+      >
+        <AddIcon />
+      </Fab>
       
       {/* Add User Dialog */}
       <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)}>
@@ -397,7 +379,7 @@ function UserManager() {
           <Button onClick={() => setAddDialogOpen(false)} color="default">
             Cancel
           </Button>
-          <Button onClick={handleAddUser} color="primary" startIcon={<SaveIcon />}>
+          <Button onClick={handleAddUser} color="primary">
             Add User
           </Button>
         </DialogActions>
@@ -437,7 +419,7 @@ function UserManager() {
           <Button onClick={() => setEditDialogOpen(false)} color="default">
             Cancel
           </Button>
-          <Button onClick={handleUpdateUser} color="primary" startIcon={<SaveIcon />}>
+          <Button onClick={handleUpdateUser} color="primary">
             Update User
           </Button>
         </DialogActions>
@@ -483,7 +465,7 @@ function UserManager() {
           {error}
         </Alert>
       </Snackbar>
-    </>
+    </Container>
   );
 }
 

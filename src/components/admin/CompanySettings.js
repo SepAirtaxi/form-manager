@@ -1,6 +1,5 @@
 // src/components/admin/CompanySettings.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -11,25 +10,17 @@ import {
   Typography,
   TextField,
   Button,
-  IconButton,
-  AppBar,
-  Toolbar,
   Divider,
   Snackbar,
   makeStyles
 } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 import {
-  ArrowBack as ArrowBackIcon,
   Save as SaveIcon,
   CloudUpload as UploadIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
-  appBarSpacer: theme.mixins.toolbar,
-  title: {
-    flexGrow: 1,
-  },
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
@@ -56,7 +47,6 @@ const useStyles = makeStyles((theme) => ({
 
 function CompanySettings() {
   const classes = useStyles();
-  const navigate = useNavigate();
   
   const [formData, setFormData] = useState({
     name: 'Copenhagen AirTaxi / CAT Flyservice',
@@ -186,194 +176,171 @@ function CompanySettings() {
   
   if (loading) {
     return (
-      <Container>
-        <div className={classes.appBarSpacer} />
+      <Container className={classes.container}>
         <Typography>Loading company settings...</Typography>
       </Container>
     );
   }
   
   return (
-    <>
-      <AppBar position="fixed">
-        <Toolbar>
-          <IconButton 
-            edge="start" 
-            color="inherit" 
-            onClick={() => navigate('/admin/dashboard')}
-          >
-            <ArrowBackIcon />
-          </IconButton>
-          <Typography variant="h6" className={classes.title}>
-            Company Settings
-          </Typography>
-          <Button 
-            color="inherit" 
-            startIcon={<SaveIcon />}
-            onClick={handleSave}
-          >
-            Save Changes
-          </Button>
-        </Toolbar>
-      </AppBar>
-
-      <div className={classes.appBarSpacer} />
+    <Container className={classes.container}>
+      <Typography variant="h4" gutterBottom>
+        Company Settings
+      </Typography>
       
-      <Container className={classes.container}>
-        <Paper className={classes.paper}>
-          {error && (
-            <Alert severity="error" style={{ marginBottom: '16px' }}>
-              {error}
-            </Alert>
+      <Paper className={classes.paper}>
+        {error && (
+          <Alert severity="error" style={{ marginBottom: '16px' }}>
+            {error}
+          </Alert>
+        )}
+        
+        <div className={classes.section}>
+          <Typography variant="h5" gutterBottom>
+            Company Information
+          </Typography>
+          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            This information will appear on all form PDFs.
+          </Typography>
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Company Name"
+            name="name"
+            value={formData.name}
+            onChange={handleInputChange}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Address"
+            name="address"
+            value={formData.address}
+            onChange={handleInputChange}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Phone"
+            name="phone"
+            value={formData.phone}
+            onChange={handleInputChange}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Email"
+            name="email"
+            value={formData.email}
+            onChange={handleInputChange}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Website"
+            name="website"
+            value={formData.website}
+            onChange={handleInputChange}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="VAT/EORI Number"
+            name="vatEori"
+            value={formData.vatEori}
+            onChange={handleInputChange}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="EASA Approval Number"
+            name="easaApprovalNo"
+            value={formData.easaApprovalNo}
+            onChange={handleInputChange}
+          />
+        </div>
+        
+        <Divider />
+        
+        <div className={classes.section} style={{ marginTop: '24px' }}>
+          <Typography variant="h5" gutterBottom>
+            Company Logo
+          </Typography>
+          
+          <input
+            accept="image/*"
+            style={{ display: 'none' }}
+            id="logo-file"
+            type="file"
+            onChange={handleFileChange}
+          />
+          <label htmlFor="logo-file">
+            <Button
+              variant="contained"
+              component="span"
+              color="primary"
+              startIcon={<UploadIcon />}
+              className={classes.uploadButton}
+            >
+              {logoPreview ? 'Change Logo' : 'Upload Logo'}
+            </Button>
+          </label>
+          
+          {logoPreview && (
+            <div>
+              <Typography variant="subtitle2" gutterBottom>
+                Logo Preview:
+              </Typography>
+              <img 
+                src={logoPreview} 
+                alt="Company Logo" 
+                className={classes.logoPreview}
+              />
+            </div>
           )}
+        </div>
+        
+        <Divider />
+        
+        <div className={classes.section} style={{ marginTop: '24px' }}>
+          <Typography variant="h5" gutterBottom>
+            Legal Text
+          </Typography>
+          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+            This text will appear at the bottom of all form PDFs.
+          </Typography>
           
-          <div className={classes.section}>
-            <Typography variant="h5" gutterBottom>
-              Company Information
-            </Typography>
-            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-              This information will appear on all form PDFs.
-            </Typography>
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Company Name"
-              name="name"
-              value={formData.name}
-              onChange={handleInputChange}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Address"
-              name="address"
-              value={formData.address}
-              onChange={handleInputChange}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Phone"
-              name="phone"
-              value={formData.phone}
-              onChange={handleInputChange}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Email"
-              name="email"
-              value={formData.email}
-              onChange={handleInputChange}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Website"
-              name="website"
-              value={formData.website}
-              onChange={handleInputChange}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="VAT/EORI Number"
-              name="vatEori"
-              value={formData.vatEori}
-              onChange={handleInputChange}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="EASA Approval Number"
-              name="easaApprovalNo"
-              value={formData.easaApprovalNo}
-              onChange={handleInputChange}
-            />
-          </div>
-          
-          <Divider />
-          
-          <div className={classes.section} style={{ marginTop: '24px' }}>
-            <Typography variant="h5" gutterBottom>
-              Company Logo
-            </Typography>
-            
-            <input
-              accept="image/*"
-              style={{ display: 'none' }}
-              id="logo-file"
-              type="file"
-              onChange={handleFileChange}
-            />
-            <label htmlFor="logo-file">
-              <Button
-                variant="contained"
-                component="span"
-                color="primary"
-                startIcon={<UploadIcon />}
-                className={classes.uploadButton}
-              >
-                {logoPreview ? 'Change Logo' : 'Upload Logo'}
-              </Button>
-            </label>
-            
-            {logoPreview && (
-              <div>
-                <Typography variant="subtitle2" gutterBottom>
-                  Logo Preview:
-                </Typography>
-                <img 
-                  src={logoPreview} 
-                  alt="Company Logo" 
-                  className={classes.logoPreview}
-                />
-              </div>
-            )}
-          </div>
-          
-          <Divider />
-          
-          <div className={classes.section} style={{ marginTop: '24px' }}>
-            <Typography variant="h5" gutterBottom>
-              Legal Text
-            </Typography>
-            <Typography variant="subtitle2" color="textSecondary" gutterBottom>
-              This text will appear at the bottom of all form PDFs.
-            </Typography>
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Legal Disclaimer / Footer Text"
-              name="legalText"
-              value={formData.legalText}
-              onChange={handleInputChange}
-              multiline
-              rows={4}
-              variant="outlined"
-            />
-          </div>
-          
-          <Button
-            variant="contained"
-            color="primary"
-            size="large"
-            className={classes.saveButton}
-            startIcon={<SaveIcon />}
-            onClick={handleSave}
-          >
-            Save All Settings
-          </Button>
-        </Paper>
-      </Container>
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Legal Disclaimer / Footer Text"
+            name="legalText"
+            value={formData.legalText}
+            onChange={handleInputChange}
+            multiline
+            rows={4}
+            variant="outlined"
+          />
+        </div>
+        
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          className={classes.saveButton}
+          startIcon={<SaveIcon />}
+          onClick={handleSave}
+        >
+          Save All Settings
+        </Button>
+      </Paper>
       
       <Snackbar 
         open={saved} 
@@ -384,7 +351,7 @@ function CompanySettings() {
           Company settings saved successfully!
         </Alert>
       </Snackbar>
-    </>
+    </Container>
   );
 }
 
