@@ -21,6 +21,10 @@ import {
   DialogContentText,
   DialogTitle,
   FormControl,
+  FormLabel,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
   InputLabel,
   Select,
   MenuItem,
@@ -77,6 +81,12 @@ const useStyles = makeStyles((theme) => ({
   },
   addBlockButton: {
     marginTop: theme.spacing(1),
+  },
+  revisionControl: {
+    marginTop: theme.spacing(2),
+    padding: theme.spacing(2),
+    backgroundColor: theme.palette.background.default,
+    borderRadius: theme.shape.borderRadius,
   }
 }));
 
@@ -92,7 +102,8 @@ function FormEditor() {
     description: '',
     blocks: [],
     revision: '1.0',
-    published: false
+    published: false,
+    hasDraft: false
   });
   
   const [loading, setLoading] = useState(isEditMode);
@@ -116,7 +127,7 @@ function FormEditor() {
           setFormData(formSnap.data());
         } else {
           setError('Form not found');
-          navigate('/admin/dashboard');
+          navigate('/admin');
         }
       } catch (err) {
         setError('Error loading form: ' + err.message);
@@ -130,6 +141,18 @@ function FormEditor() {
       loadFormData();
     }
   }, [formId, isEditMode, navigate]);
+  
+  // Helper function to calculate next revision number
+  const getNextRevision = (type) => {
+    const currentRevision = formData.revision || '1.0';
+    const [major, minor] = currentRevision.split('.').map(Number);
+    
+    if (type === 'major') {
+      return `${major + 1}.0`;
+    } else {
+      return `${major}.${minor + 1}`;
+    }
+  };
   
   // Handle input changes
   const handleInputChange = (e) => {
@@ -199,6 +222,8 @@ function FormEditor() {
       
       const formToSave = {
         ...formData,
+        hasDraft: true,
+        draftUpdatedAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       };
       
@@ -206,11 +231,16 @@ function FormEditor() {
         // Update existing form
         const formRef = doc(db, 'forms', formId);
         await updateDoc(formRef, formToSave);
+        // Show success message
+        setError(''); // Clear any existing errors
+        alert('Form draft saved successfully!');
       } else {
         // Create new form
-        const formRef = doc(collection(db, 'forms'));
-        await setDoc(formRef, formToSave);
-        navigate(`/admin/form/edit/${formRef.id}`);
+        const formsCollectionRef = collection(db, 'forms');
+        const newFormRef = doc(formsCollectionRef);
+        await setDoc(newFormRef, formToSave);
+        alert('Form draft created successfully!');
+        navigate(`/admin/form/edit/${newFormRef.id}`);
       }
       
     } catch (err) {
@@ -236,19 +266,15 @@ function FormEditor() {
       // Calculate new revision number
       let newRevision = formData.revision || '1.0';
       if (formData.published) {
-        // If already published, increment version
-        const [major, minor] = newRevision.split('.').map(Number);
-        if (revisionType === 'major') {
-          newRevision = `${major + 1}.0`;
-        } else {
-          newRevision = `${major}.${minor + 1}`;
-        }
+        // If already published, increment version based on selection
+        newRevision = getNextRevision(revisionType);
       }
       
       const formToPublish = {
         ...formData,
         revision: newRevision,
         published: true,
+        hasDraft: false, // Clear draft flag when publishing
         updatedAt: serverTimestamp()
       };
       
@@ -258,13 +284,15 @@ function FormEditor() {
         await updateDoc(formRef, formToPublish);
       } else {
         // Create new form
-        const formRef = doc(collection(db, 'forms'));
-        await setDoc(formRef, formToPublish);
-        navigate(`/admin/form/edit/${formRef.id}`);
+        const formsCollectionRef = collection(db, 'forms');
+        const newFormRef = doc(formsCollectionRef);
+        await setDoc(newFormRef, formToPublish);
+        navigate(`/admin/form/edit/${newFormRef.id}`);
       }
       
       setFormData(formToPublish);
       setPublishDialogOpen(false);
+      alert('Form published successfully!');
       
     } catch (err) {
       setError('Error publishing form: ' + err.message);
@@ -294,7 +322,7 @@ function FormEditor() {
           <IconButton 
             edge="start" 
             color="inherit" 
-            onClick={() => navigate('/admin/dashboard')}
+            onClick={() => navigate('/admin')}
           >
             <ArrowBackIcon />
           </IconButton>
@@ -357,9 +385,31 @@ function FormEditor() {
           />
           
           {formData.published && (
-            <Typography variant="subtitle2" gutterBottom>
-              Current Revision: {formData.revision || '1.0'}
-            </Typography>
+            <div className={classes.revisionControl}>
+              <Typography variant="subtitle2" gutterBottom>
+                Current Revision: {formData.revision || '1.0'}
+              </Typography>
+              
+              <FormControl component="fieldset" className={classes.formSection}>
+                <FormLabel component="legend">Revision Type for Next Save</FormLabel>
+                <RadioGroup 
+                  row 
+                  value={revisionType} 
+                  onChange={(e) => setRevisionType(e.target.value)}
+                >
+                  <FormControlLabel 
+                    value="minor" 
+                    control={<Radio color="primary" />} 
+                    label={`Minor Revision (Next: ${getNextRevision('minor')})`} 
+                  />
+                  <FormControlLabel 
+                    value="major" 
+                    control={<Radio color="primary" />} 
+                    label={`Major Revision (Next: ${getNextRevision('major')})`} 
+                  />
+                </RadioGroup>
+              </FormControl>
+            </div>
           )}
         </Paper>
         
@@ -451,8 +501,8 @@ function FormEditor() {
                 value={revisionType}
                 onChange={(e) => setRevisionType(e.target.value)}
               >
-                <MenuItem value="minor">Minor Revision (1.0 → 1.1)</MenuItem>
-                <MenuItem value="major">Major Revision (1.0 → 2.0)</MenuItem>
+                <MenuItem value="minor">Minor Revision (Next: {getNextRevision('minor')})</MenuItem>
+                <MenuItem value="major">Major Revision (Next: {getNextRevision('major')})</MenuItem>
               </Select>
             </FormControl>
           )}

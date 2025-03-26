@@ -20,16 +20,17 @@ import {
   IconButton,
   Toolbar,
   AppBar,
+  Grid,
+  Card,
+  CardContent,
+  CardActions,
+  Chip,
   makeStyles,
   Dialog,
   DialogActions,
   DialogContent,
   DialogContentText,
-  DialogTitle,
-  Grid,
-  Card,
-  CardContent,
-  CardActions
+  DialogTitle
 } from '@material-ui/core';
 import {
   Add as AddIcon,
@@ -37,9 +38,9 @@ import {
   Delete as DeleteIcon,
   FileCopy as DuplicateIcon,
   ExitToApp as LogoutIcon,
-  Settings as SettingsIcon,
-  Create as CreateIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  Business as BusinessIcon,
+  Description as DescriptionIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
@@ -61,20 +62,17 @@ const useStyles = makeStyles((theme) => ({
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    transition: 'transform 0.2s ease-in-out',
-    '&:hover': {
-      transform: 'translateY(-5px)',
-      boxShadow: theme.shadows[6]
-    }
   },
-  cardTitle: {
-    fontWeight: 'bold',
+  cardActions: {
+    marginTop: 'auto'
   },
-  cardContent: {
-    flexGrow: 1,
-  },
-  adminTools: {
+  adminToolsSection: {
     marginBottom: theme.spacing(4),
+  },
+  draftChip: {
+    marginLeft: theme.spacing(1),
+    backgroundColor: theme.palette.info.main,
+    color: theme.palette.info.contrastText,
   }
 }));
 
@@ -85,7 +83,7 @@ function AdminDashboard() {
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [formToDelete, setFormToDelete] = useState(null);
-  const { logout } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
 
   // Load forms on component mount
@@ -154,6 +152,17 @@ function AdminDashboard() {
     }
   };
 
+  // Format date for display
+  const formatDate = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    
+    try {
+      return new Date(timestamp.toDate()).toLocaleDateString();
+    } catch (err) {
+      return 'Invalid date';
+    }
+  };
+
   return (
     <>
       <AppBar position="fixed">
@@ -199,26 +208,26 @@ function AdminDashboard() {
         )}
 
         {/* Admin Tools Section */}
-        <div className={classes.adminTools}>
+        <div className={classes.adminToolsSection}>
           <Typography variant="h5" gutterBottom>
             Admin Tools
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} sm={6} md={4}>
               <Card className={classes.card}>
-                <CardContent className={classes.cardContent}>
-                  <Typography variant="h6" className={classes.cardTitle} gutterBottom>
+                <CardContent>
+                  <Typography variant="h6" component="h2">
                     Create New Form
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
-                    Design a new form with custom fields, sections, and signature areas.
+                    Create a new form template with customizable fields and structure.
                   </Typography>
                 </CardContent>
-                <CardActions>
+                <CardActions className={classes.cardActions}>
                   <Button
                     variant="contained"
                     color="primary"
-                    startIcon={<CreateIcon />}
+                    startIcon={<AddIcon />}
                     component={Link}
                     to="/admin/form/new"
                     fullWidth
@@ -228,18 +237,17 @@ function AdminDashboard() {
                 </CardActions>
               </Card>
             </Grid>
-            
             <Grid item xs={12} sm={6} md={4}>
               <Card className={classes.card}>
-                <CardContent className={classes.cardContent}>
-                  <Typography variant="h6" className={classes.cardTitle} gutterBottom>
-                    Signature Management
+                <CardContent>
+                  <Typography variant="h6" component="h2">
+                    Manage Signatures
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
                     Add, edit, or remove authorized signatories for form completion.
                   </Typography>
                 </CardContent>
-                <CardActions>
+                <CardActions className={classes.cardActions}>
                   <Button
                     variant="contained"
                     color="primary"
@@ -253,27 +261,26 @@ function AdminDashboard() {
                 </CardActions>
               </Card>
             </Grid>
-            
             <Grid item xs={12} sm={6} md={4}>
               <Card className={classes.card}>
-                <CardContent className={classes.cardContent}>
-                  <Typography variant="h6" className={classes.cardTitle} gutterBottom>
+                <CardContent>
+                  <Typography variant="h6" component="h2">
                     Company Settings
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
-                    Configure company information, logo, and legal text for forms.
+                    Update company information, logo, and legal text for forms.
                   </Typography>
                 </CardContent>
-                <CardActions>
+                <CardActions className={classes.cardActions}>
                   <Button
                     variant="contained"
                     color="primary"
-                    startIcon={<SettingsIcon />}
+                    startIcon={<BusinessIcon />}
                     component={Link}
                     to="/admin/company-settings"
                     fullWidth
                   >
-                    Edit Settings
+                    Company Settings
                   </Button>
                 </CardActions>
               </Card>
@@ -281,20 +288,10 @@ function AdminDashboard() {
           </Grid>
         </div>
 
-        {/* Forms List */}
+        {/* Existing Forms Section */}
         <Typography variant="h5" gutterBottom>
           Existing Forms
         </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          className={classes.button}
-          startIcon={<AddIcon />}
-          component={Link}
-          to="/admin/form/new"
-        >
-          Create New Form
-        </Button>
 
         <TableContainer component={Paper} className={classes.tableContainer}>
           <Table aria-label="forms table">
@@ -328,10 +325,17 @@ function AdminDashboard() {
                     </TableCell>
                     <TableCell>{form.revision || '1.0'}</TableCell>
                     <TableCell>
-                      {form.updatedAt ? new Date(form.updatedAt.toDate()).toLocaleDateString() : 'N/A'}
+                      {formatDate(form.updatedAt)}
                     </TableCell>
                     <TableCell>
                       {form.published ? 'Published' : 'Draft'}
+                      {form.hasDraft && form.published && (
+                        <Chip 
+                          size="small" 
+                          label="Has Draft" 
+                          className={classes.draftChip} 
+                        />
+                      )}
                     </TableCell>
                     <TableCell align="right">
                       <IconButton
