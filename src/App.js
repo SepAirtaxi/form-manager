@@ -1,6 +1,6 @@
 // src/App.js
 import React, { createContext, useContext, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, Outlet, useOutletContext } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import './App.css';
 
 // Authentication
@@ -34,6 +34,11 @@ const UnauthorizedPage = () => (
 // Create a context for draft count
 const DraftCountContext = createContext(0);
 
+// Custom hook to use the draft count context
+export function useDraftCount() {
+  return useContext(DraftCountContext);
+}
+
 // Component to wrap routes that should have the navigation menu
 function LayoutWithNav() {
   const [draftCount, setDraftCount] = useState(0);
@@ -46,11 +51,6 @@ function LayoutWithNav() {
   );
 }
 
-// Custom hook to use the draft count context
-export function useDraftCount() {
-  return useContext(DraftCountContext);
-}
-
 function App() {
   return (
     <AuthProvider>
@@ -60,33 +60,33 @@ function App() {
           <Route path="/login" element={<Login />} />
           
           {/* All other routes with navigation menu */}
-          <Route path="/" element={<LayoutWithNav />}>
+          <Route element={<LayoutWithNav />}>
+            {/* Root path redirects based on role (handled in RoleProtectedRoute) */}
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            
             {/* Unauthorized page */}
-            <Route path="unauthorized" element={<UnauthorizedPage />} />
+            <Route path="/unauthorized" element={<UnauthorizedPage />} />
             
             {/* User routes (requires employee role or higher) */}
             <Route element={<RoleProtectedRoute allowedRoles={['employee', 'manager', 'admin']} />}>
-              <Route path="dashboard" element={<UserDashboard />} />
-              <Route path="forms" element={<FormList />} />
-              <Route path="form/:formId" element={<FormViewer />} />
+              <Route path="/dashboard" element={<UserDashboard />} />
+              <Route path="/forms" element={<FormList />} />
+              <Route path="/form/:formId" element={<FormViewer />} />
             </Route>
             
             {/* Admin routes (requires manager role or higher) */}
-            <Route path="/admin" element={<RoleProtectedRoute allowedRoles={['manager', 'admin']} />}>
-              <Route path="dashboard" element={<AdminDashboard />} />
-              <Route path="form/new" element={<FormEditor />} />
-              <Route path="form/edit/:formId" element={<FormEditor />} />
-              <Route path="signatures" element={<SignatureManager />} />
-              <Route path="company-settings" element={<CompanySettings />} />
+            <Route element={<RoleProtectedRoute allowedRoles={['manager', 'admin']} />}>
+              <Route path="/admin/dashboard" element={<AdminDashboard />} />
+              <Route path="/admin/form/new" element={<FormEditor />} />
+              <Route path="/admin/form/edit/:formId" element={<FormEditor />} />
+              <Route path="/admin/signatures" element={<SignatureManager />} />
+              <Route path="/admin/company-settings" element={<CompanySettings />} />
             </Route>
             
             {/* Admin-only routes */}
-            <Route path="/admin" element={<RoleProtectedRoute allowedRoles={['admin']} />}>
-              <Route path="users" element={<UserManager />} />
+            <Route element={<RoleProtectedRoute allowedRoles={['admin']} />}>
+              <Route path="/admin/users" element={<UserManager />} />
             </Route>
-            
-            {/* Default redirect - this is clearer now */}
-            <Route index element={<Navigate to="/dashboard" replace />} />
           </Route>
           
           {/* Catch all - redirect to login */}

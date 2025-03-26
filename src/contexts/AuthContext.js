@@ -25,6 +25,7 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [roleLoading, setRoleLoading] = useState(true);
 
   // Sign in function
   const login = async (email, password) => {
@@ -124,10 +125,18 @@ export function AuthProvider({ children }) {
       setCurrentUser(user);
       
       if (user) {
-        const role = await getUserRole(user);
-        setUserRole(role);
+        setRoleLoading(true);
+        try {
+          const role = await getUserRole(user);
+          setUserRole(role);
+        } catch (error) {
+          console.error("Error fetching user role:", error);
+        } finally {
+          setRoleLoading(false);
+        }
       } else {
         setUserRole(null);
+        setRoleLoading(false);
       }
       
       setLoading(false);
@@ -145,12 +154,13 @@ export function AuthProvider({ children }) {
     logout,
     createUser,
     updateUserRole,
-    hasRole
+    hasRole,
+    loading: loading || roleLoading // We're loading if either auth or role is loading
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {!loading && !roleLoading && children}
     </AuthContext.Provider>
   );
 }
