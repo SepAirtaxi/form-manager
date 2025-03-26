@@ -28,7 +28,7 @@ This project is currently in early development stage. We have managed to impleme
 4. Company detail module
 5. Basic setup of the form manager, including revision control, minor/major revision function, draft function,. Currently WIP
 
-More features need to be implemented, such as refining the group block functions in the editor, and metadata/tagging for archiving.
+More features need to be implemented, such as refining the group block functions in the editor, and metadata/tagging for archiving and organising published forms.
 
 ## Project Structure
 
