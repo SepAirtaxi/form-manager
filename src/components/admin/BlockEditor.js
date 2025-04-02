@@ -50,18 +50,19 @@ const useStyles = makeStyles((theme) => ({
   }
 }));
 
-// Field type options
+// Updated field type options with multi_choice
 const fieldTypes = [
   { value: 'short_text', label: 'Short text field' },
   { value: 'long_text', label: 'Long text area' },
   { value: 'number', label: 'Number field' },
   { value: 'date', label: 'Date picker' },
   { value: 'checkbox', label: 'Checkbox (Yes/No)' },
-  { value: 'radio', label: 'Multiple choice (radio buttons)' },
+  { value: 'radio', label: 'Single Choice (radio buttons)' },
+  { value: 'multi_choice', label: 'Multiple Choice (checkboxes)' },
   { value: 'dropdown', label: 'Dropdown menu' }
 ];
 
-function BlockEditor({ open, block, onSave, onClose }) {
+function BlockEditor({ open, block, onSave, onClose, parentId }) {
   const classes = useStyles();
   const [formData, setFormData] = useState({
     type: 'field', // Default type
@@ -79,7 +80,7 @@ function BlockEditor({ open, block, onSave, onClose }) {
       units: ''
     },
     newOption: '', // Temporary state for adding options
-    id: '' // Unique ID for the block
+    parentId: null // Reference to parent group if applicable
   });
   
   // Update form when block changes
@@ -101,10 +102,16 @@ function BlockEditor({ open, block, onSave, onClose }) {
           units: ''
         },
         newOption: '',
-        id: block.id || ''
+        parentId: block.parentId || parentId || null
       });
+    } else if (parentId) {
+      // If creating a new block inside a group
+      setFormData(prev => ({
+        ...prev,
+        parentId: parentId
+      }));
     }
-  }, [block]);
+  }, [block, parentId]);
   
   // Handle input changes
   const handleInputChange = (e) => {
@@ -155,10 +162,11 @@ function BlockEditor({ open, block, onSave, onClose }) {
   const handleSave = () => {
     // Create a clean block object to save
     const blockToSave = {
-      id: formData.id,
+      id: block?.id || `block-${Date.now()}`, // Generate an ID if not editing
       type: formData.type,
       title: formData.title,
-      description: formData.description
+      description: formData.description,
+      parentId: formData.parentId
     };
     
     // Add type-specific properties
@@ -166,8 +174,8 @@ function BlockEditor({ open, block, onSave, onClose }) {
       blockToSave.fieldType = formData.fieldType;
       blockToSave.required = formData.required;
       
-      // Add options for multiple choice/dropdown
-      if (['radio', 'dropdown'].includes(formData.fieldType)) {
+      // Add options for multiple choice/dropdown/multi-choice
+      if (['radio', 'dropdown', 'multi_choice'].includes(formData.fieldType)) {
         blockToSave.options = formData.options;
       }
       
@@ -199,11 +207,11 @@ function BlockEditor({ open, block, onSave, onClose }) {
           }
         }
       }
-    } else if (formData.type === 'group') {
-      // For group blocks, initialize an empty children array if it doesn't exist
-      blockToSave.children = block && block.children ? block.children : [];
     } else if (formData.type === 'signature') {
       blockToSave.includeDate = true; // Default behavior
+    } else if (formData.type === 'group') {
+      // For group blocks, initialize an empty children array if it doesn't exist
+      blockToSave.children = block?.children || [];
     }
     
     onSave(blockToSave);
@@ -359,8 +367,8 @@ function BlockEditor({ open, block, onSave, onClose }) {
                 </>
               )}
               
-              {/* Multiple choice/dropdown options */}
-              {(formData.fieldType === 'radio' || formData.fieldType === 'dropdown') && (
+              {/* Multiple choice/dropdown/multi-choice options */}
+              {(['radio', 'dropdown', 'multi_choice'].includes(formData.fieldType)) && (
                 <div className={classes.formSection}>
                   <Typography variant="subtitle2" gutterBottom>
                     Options
@@ -398,19 +406,16 @@ function BlockEditor({ open, block, onSave, onClose }) {
                       ))}
                     </List>
                   )}
+                  
+                  {formData.options.length === 0 && (
+                    <Typography variant="body2" color="textSecondary">
+                      No options added yet. Add at least one option.
+                    </Typography>
+                  )}
                 </div>
               )}
             </div>
           </>
-        )}
-        
-        {/* Group Block Options */}
-        {formData.type === 'group' && (
-          <div className={classes.formSection}>
-            <Typography variant="subtitle2" gutterBottom>
-              This group will act as a container for related fields. You can add fields to this group after creating it.
-            </Typography>
-          </div>
         )}
         
         {/* Signature Block Options */}
@@ -433,6 +438,18 @@ function BlockEditor({ open, block, onSave, onClose }) {
             />
           </div>
         )}
+        
+        {/* Group Block Options */}
+        {formData.type === 'group' && (
+          <div className={classes.formSection}>
+            <Typography variant="subtitle2" gutterBottom>
+              Sections contain fields and signature blocks. Each form must have at least one section.
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              You can add fields and signature blocks to this section after creating it.
+            </Typography>
+          </div>
+        )}
       </DialogContent>
       
       <DialogActions>
@@ -451,7 +468,8 @@ BlockEditor.propTypes = {
   open: PropTypes.bool.isRequired,
   block: PropTypes.object,
   onSave: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired
+  onClose: PropTypes.func.isRequired,
+  parentId: PropTypes.string // Optional parent group ID when creating blocks inside a group
 };
 
 export default BlockEditor;
