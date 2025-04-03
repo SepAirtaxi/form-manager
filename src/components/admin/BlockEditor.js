@@ -62,7 +62,7 @@ const fieldTypes = [
   { value: 'dropdown', label: 'Dropdown menu' }
 ];
 
-function BlockEditor({ open, block, onSave, onClose, parentId }) {
+function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
   const classes = useStyles();
   const [formData, setFormData] = useState({
     type: 'field', // Default type
@@ -87,7 +87,7 @@ function BlockEditor({ open, block, onSave, onClose, parentId }) {
   useEffect(() => {
     if (block) {
       setFormData({
-        type: block.type || 'field',
+        type: block.type || (mode === 'addSection' ? 'group' : 'field'),
         title: block.title || '',
         description: block.description || '',
         fieldType: block.fieldType || 'short_text',
@@ -108,10 +108,17 @@ function BlockEditor({ open, block, onSave, onClose, parentId }) {
       // If creating a new block inside a group
       setFormData(prev => ({
         ...prev,
+        type: mode === 'addSection' ? 'group' : 'field',
         parentId: parentId
       }));
+    } else {
+      // Creating a new top-level block (only groups allowed)
+      setFormData(prev => ({
+        ...prev,
+        type: 'group'
+      }));
     }
-  }, [block, parentId]);
+  }, [block, parentId, mode]);
   
   // Handle input changes
   const handleInputChange = (e) => {
@@ -216,28 +223,44 @@ function BlockEditor({ open, block, onSave, onClose, parentId }) {
     
     onSave(blockToSave);
   };
+
+  // Determine if this is creating a section or a field
+  const isAddingSection = mode === 'addSection' || (!parentId && !block?.parentId);
+  const isEditingExisting = block && block.id;
+  
+  // Get the appropriate title based on the context
+  const getDialogTitle = () => {
+    if (isEditingExisting) {
+      if (formData.type === 'group') return 'Edit Section';
+      if (formData.type === 'signature') return 'Edit Signature Field';
+      return 'Edit Form Field';
+    } else {
+      if (isAddingSection) return 'Add New Section';
+      return 'Add New Field';
+    }
+  };
   
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>
-        {formData.type === 'group' ? 'Section' : 
-         formData.type === 'signature' ? 'Signature Field' : 'Form Field'}
+        {getDialogTitle()}
       </DialogTitle>
       
       <DialogContent dividers>
-        {/* Block Type Selection */}
-        <FormControl className={classes.formSection} fullWidth margin="normal">
-          <InputLabel>Block Type</InputLabel>
-          <Select
-            name="type"
-            value={formData.type}
-            onChange={handleInputChange}
-          >
-            <MenuItem value="group">Group Block (Section)</MenuItem>
-            <MenuItem value="field">Field Block (Question/Data Field)</MenuItem>
-            <MenuItem value="signature">Signature Block</MenuItem>
-          </Select>
-        </FormControl>
+        {/* Block Type Selection - Only show if editing an existing field or adding a field inside group */}
+        {!isAddingSection && !formData.type === 'group' && (
+          <FormControl className={classes.formSection} fullWidth margin="normal">
+            <InputLabel>Block Type</InputLabel>
+            <Select
+              name="type"
+              value={formData.type}
+              onChange={handleInputChange}
+            >
+              <MenuItem value="field">Field Block (Question/Data Field)</MenuItem>
+              <MenuItem value="signature">Signature Block</MenuItem>
+            </Select>
+          </FormControl>
+        )}
         
         {/* Common Fields */}
         <div className={classes.formSection}>
@@ -263,7 +286,7 @@ function BlockEditor({ open, block, onSave, onClose, parentId }) {
           />
         </div>
         
-        <Divider className={classes.divider} />
+        {formData.type !== 'group' && <Divider className={classes.divider} />}
         
         {/* Field-specific options */}
         {formData.type === 'field' && (
@@ -457,7 +480,7 @@ function BlockEditor({ open, block, onSave, onClose, parentId }) {
           Cancel
         </Button>
         <Button onClick={handleSave} color="primary" disabled={!formData.title}>
-          Save Block
+          Save
         </Button>
       </DialogActions>
     </Dialog>
@@ -469,7 +492,8 @@ BlockEditor.propTypes = {
   block: PropTypes.object,
   onSave: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,
-  parentId: PropTypes.string // Optional parent group ID when creating blocks inside a group
+  parentId: PropTypes.string, // Optional parent group ID when creating blocks inside a group
+  mode: PropTypes.oneOf(['addSection', 'addField']) // Optional mode to restrict block types
 };
 
 export default BlockEditor;
