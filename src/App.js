@@ -1,7 +1,9 @@
 // src/App.js
-import React, { createContext, useContext, useState } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { ThemeProvider } from '@material-ui/core/styles';
 import './App.css';
+import theme from './theme';
 
 // Authentication
 import { AuthProvider } from './contexts/AuthContext';
@@ -31,69 +33,68 @@ const UnauthorizedPage = () => (
   </div>
 );
 
-// Create a context for draft count
-const DraftCountContext = createContext(0);
-
-// Custom hook to use the draft count context
-export function useDraftCount() {
-  return useContext(DraftCountContext);
-}
-
-// Component to wrap routes that should have the navigation menu
-function LayoutWithNav() {
-  const [draftCount, setDraftCount] = useState(0);
-  
+function App() {
   return (
-    <DraftCountContext.Provider value={{ draftCount, setDraftCount }}>
-      <NavigationMenu draftCount={draftCount} />
-      <Outlet />
-    </DraftCountContext.Provider>
+    <ThemeProvider theme={theme}>
+      <AuthProvider>
+        <Router>
+          <Routes>
+            {/* Login page (no navigation menu) */}
+            <Route path="/login" element={<Login />} />
+            
+            {/* All other routes with navigation menu */}
+            <Route path="/" element={<RoutesWithNav />}>
+              {/* Unauthorized page */}
+              <Route path="unauthorized" element={<UnauthorizedPage />} />
+              
+              {/* Default redirect */}
+              <Route index element={<Navigate to="/dashboard" replace />} />
+              
+              {/* User routes (requires employee role or higher) */}
+              <Route path="/" element={<RoleProtectedRoute allowedRoles={['employee', 'manager', 'admin']} />}>
+                <Route path="dashboard" element={<UserDashboard />} />
+                <Route path="forms" element={<FormList />} />
+                <Route path="form/:formId" element={<FormViewer />} />
+              </Route>
+              
+              {/* Admin routes (requires manager role or higher) */}
+              <Route path="/admin" element={<RoleProtectedRoute allowedRoles={['manager', 'admin']} />}>
+                <Route path="dashboard" element={<AdminDashboard />} />
+                <Route path="form/new" element={<FormEditor />} />
+                <Route path="form/edit/:formId" element={<FormEditor />} />
+                <Route path="signatures" element={<SignatureManager />} />
+                <Route path="company-settings" element={<CompanySettings />} />
+              </Route>
+              
+              {/* Admin-only routes */}
+              <Route path="/admin" element={<RoleProtectedRoute allowedRoles={['admin']} />}>
+                <Route path="users" element={<UserManager />} />
+              </Route>
+            </Route>
+            
+            {/* Catch all - redirect to login */}
+            <Route path="*" element={<Navigate to="/login" replace />} />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
-function App() {
+// Component to wrap routes that should have the navigation menu
+function RoutesWithNav() {
+  const [draftCount, setDraftCount] = React.useState(0);
+  
+  // We'll update this when we get draft count data from the dashboard
+  const updateDraftCount = (count) => {
+    setDraftCount(count);
+  };
+  
   return (
-    <AuthProvider>
-      <Router>
-        <Routes>
-          {/* Login page (no navigation menu) */}
-          <Route path="/login" element={<Login />} />
-          
-          {/* All other routes with navigation menu */}
-          <Route element={<LayoutWithNav />}>
-            {/* Root path redirects based on role (handled in RoleProtectedRoute) */}
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            
-            {/* Unauthorized page */}
-            <Route path="/unauthorized" element={<UnauthorizedPage />} />
-            
-            {/* User routes (requires employee role or higher) */}
-            <Route element={<RoleProtectedRoute allowedRoles={['employee', 'manager', 'admin']} />}>
-              <Route path="/dashboard" element={<UserDashboard />} />
-              <Route path="/forms" element={<FormList />} />
-              <Route path="/form/:formId" element={<FormViewer />} />
-            </Route>
-            
-            {/* Admin routes (requires manager role or higher) */}
-            <Route element={<RoleProtectedRoute allowedRoles={['manager', 'admin']} />}>
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/form/new" element={<FormEditor />} />
-              <Route path="/admin/form/edit/:formId" element={<FormEditor />} />
-              <Route path="/admin/signatures" element={<SignatureManager />} />
-              <Route path="/admin/company-settings" element={<CompanySettings />} />
-            </Route>
-            
-            {/* Admin-only routes */}
-            <Route element={<RoleProtectedRoute allowedRoles={['admin']} />}>
-              <Route path="/admin/users" element={<UserManager />} />
-            </Route>
-          </Route>
-          
-          {/* Catch all - redirect to login */}
-          <Route path="*" element={<Navigate to="/login" replace />} />
-        </Routes>
-      </Router>
-    </AuthProvider>
+    <>
+      <NavigationMenu draftCount={draftCount} />
+      <Outlet context={{ updateDraftCount }} />
+    </>
   );
 }
 

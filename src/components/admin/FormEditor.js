@@ -1,5 +1,5 @@
 // src/components/admin/FormEditor.js
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db } from '../../firebase';
@@ -12,7 +12,6 @@ import {
   Typography,
   TextField,
   Button,
-  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
@@ -31,29 +30,46 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  IconButton,
   Box,
-  Tooltip,
-  Card,
-  CardContent,
-  makeStyles
+  useMediaQuery,
+  makeStyles,
+  useTheme
 } from '@material-ui/core';
 import {
-  ArrowBack as ArrowBackIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  ArrowUpward as ArrowUpIcon,
+  ArrowDownward as ArrowDownIcon,
   Save as SaveIcon,
   Publish as PublishIcon,
-  ExpandMore as ExpandMoreIcon,
-  ExpandLess as ExpandLessIcon,
-  ArrowUpward as ArrowUpIcon,
-  ArrowDownward as ArrowDownIcon
+  Cancel as CancelIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
   root: {
     flexGrow: 1,
+  },
+  content: {
     padding: theme.spacing(3),
+    maxWidth: '900px',
+    margin: '0 auto',
+  },
+  header: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    marginBottom: theme.spacing(3),
+  },
+  title: {
+    marginBottom: theme.spacing(2),
+  },
+  actionButtons: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: theme.spacing(2),
+    marginBottom: theme.spacing(3),
   },
   paper: {
     padding: theme.spacing(3),
@@ -62,49 +78,22 @@ const useStyles = makeStyles((theme) => ({
   formSection: {
     marginBottom: theme.spacing(3),
   },
-  buttonsContainer: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    marginTop: theme.spacing(3),
-  },
   blockList: {
     marginTop: theme.spacing(2),
-  },
-  groupBlock: {
-    border: `1px solid ${theme.palette.primary.main}`,
-    marginBottom: theme.spacing(2),
-    borderRadius: theme.shape.borderRadius,
-    backgroundColor: theme.palette.background.default,
-  },
-  groupHeader: {
-    padding: theme.spacing(1, 2),
-    backgroundColor: theme.palette.primary.light,
-    color: theme.palette.primary.contrastText,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    cursor: 'pointer',
-  },
-  groupContent: {
-    padding: theme.spacing(2),
   },
   blockItem: {
     border: `1px solid ${theme.palette.divider}`,
     marginBottom: theme.spacing(1),
     borderRadius: theme.shape.borderRadius,
-    backgroundColor: theme.palette.background.paper,
   },
-  moveButtons: {
+  nestedBlock: {
+    marginLeft: theme.spacing(4),
+  },
+  blockActions: {
     display: 'flex',
-    flexDirection: 'column',
-    marginRight: theme.spacing(1),
   },
   addBlockButton: {
     marginTop: theme.spacing(1),
-  },
-  addGroupButton: {
-    marginTop: theme.spacing(2),
-    marginBottom: theme.spacing(2),
   },
   revisionControl: {
     marginTop: theme.spacing(2),
@@ -112,214 +101,22 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.palette.background.default,
     borderRadius: theme.shape.borderRadius,
   },
-  actionButtons: {
-    display: 'flex',
-    gap: theme.spacing(2),
-    marginBottom: theme.spacing(3),
-  },
-  fieldTypeChip: {
-    marginLeft: theme.spacing(1),
-    fontSize: '0.7rem',
-    padding: theme.spacing(0.25, 1),
+  mobileWarning: {
+    padding: theme.spacing(3),
+    margin: theme.spacing(2),
+    backgroundColor: theme.palette.warning.light,
     borderRadius: theme.shape.borderRadius,
-    backgroundColor: theme.palette.grey[300],
-    color: theme.palette.text.secondary,
+    textAlign: 'center',
   },
-  moveButtonIcon: {
-    fontSize: '1.2rem',
-  }
 }));
-
-// Block Item Component with move up/down buttons
-const BlockItem = ({ block, index, groupId, moveBlock, onEdit, onDelete, isFirst, isLast }) => {
-  const classes = useStyles();
-  
-  // Get field type label
-  const getFieldTypeLabel = (block) => {
-    if (block.type === 'field') {
-      switch (block.fieldType) {
-        case 'short_text': return 'Text';
-        case 'long_text': return 'Textarea';
-        case 'number': return 'Number';
-        case 'date': return 'Date';
-        case 'checkbox': return 'Checkbox';
-        case 'radio': return 'Single Choice';
-        case 'multi_choice': return 'Multiple Choice';
-        case 'dropdown': return 'Dropdown';
-        default: return block.fieldType;
-      }
-    }
-    return block.type;
-  };
-  
-  return (
-    <ListItem 
-      className={classes.blockItem}
-      button
-      onClick={() => onEdit(block, index, groupId)}
-    >
-      <div className={classes.moveButtons}>
-        <IconButton 
-          size="small" 
-          disabled={isFirst}
-          onClick={(e) => {
-            e.stopPropagation();
-            moveBlock(index, index - 1, groupId, groupId);
-          }}
-        >
-          <ArrowUpIcon className={classes.moveButtonIcon} />
-        </IconButton>
-        <IconButton 
-          size="small" 
-          disabled={isLast}
-          onClick={(e) => {
-            e.stopPropagation();
-            moveBlock(index, index + 1, groupId, groupId);
-          }}
-        >
-          <ArrowDownIcon className={classes.moveButtonIcon} />
-        </IconButton>
-      </div>
-      
-      <ListItemText
-        primary={
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            {block.title || 'Untitled Block'}
-            <span className={classes.fieldTypeChip}>{getFieldTypeLabel(block)}</span>
-          </div>
-        }
-        secondary={block.description || ''}
-      />
-      
-      <ListItemSecondaryAction>
-        <IconButton edge="end" onClick={(e) => {
-          e.stopPropagation();
-          onEdit(block, index, groupId);
-        }}>
-          <EditIcon />
-        </IconButton>
-        <IconButton edge="end" onClick={(e) => {
-          e.stopPropagation();
-          onDelete(index, groupId);
-        }}>
-          <DeleteIcon />
-        </IconButton>
-      </ListItemSecondaryAction>
-    </ListItem>
-  );
-};
-
-// Group Component with expand/collapse
-const GroupBlock = ({ group, index, moveBlock, moveGroup, onEdit, onDelete, onAddBlock, isFirst, isLast }) => {
-  const classes = useStyles();
-  const [expanded, setExpanded] = useState(true);
-  
-  // Toggle expanded state
-  const toggleExpanded = (e) => {
-    e.stopPropagation();
-    setExpanded(!expanded);
-  };
-  
-  return (
-    <div className={classes.groupBlock}>
-      <div className={classes.groupHeader}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div className={classes.moveButtons}>
-            <IconButton 
-              size="small" 
-              disabled={isFirst}
-              onClick={(e) => {
-                e.stopPropagation();
-                moveGroup(index, index - 1);
-              }}
-            >
-              <ArrowUpIcon className={classes.moveButtonIcon} />
-            </IconButton>
-            <IconButton 
-              size="small" 
-              disabled={isLast}
-              onClick={(e) => {
-                e.stopPropagation();
-                moveGroup(index, index + 1);
-              }}
-            >
-              <ArrowDownIcon className={classes.moveButtonIcon} />
-            </IconButton>
-          </div>
-          <Typography variant="subtitle1" onClick={() => onEdit(group, index)}>
-            {group.title || 'Untitled Section'}
-          </Typography>
-        </div>
-        <div>
-          <IconButton size="small" onClick={toggleExpanded}>
-            {expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-          </IconButton>
-          <IconButton size="small" onClick={(e) => {
-            e.stopPropagation();
-            onEdit(group, index);
-          }}>
-            <EditIcon />
-          </IconButton>
-          {/* Only allow deleting if this isn't the last group */}
-          <IconButton 
-            size="small" 
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete(index);
-            }}
-            disabled={false} // Will be disabled in parent if this is the last group
-          >
-            <DeleteIcon />
-          </IconButton>
-        </div>
-      </div>
-      
-      {expanded && (
-        <div className={classes.groupContent}>
-          {group.children && group.children.length > 0 ? (
-            <List className={classes.blockList}>
-              {group.children.map((block, blockIndex) => (
-                <BlockItem
-                  key={block.id || blockIndex}
-                  block={block}
-                  index={blockIndex}
-                  groupId={group.id}
-                  moveBlock={moveBlock}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  isFirst={blockIndex === 0}
-                  isLast={blockIndex === group.children.length - 1}
-                />
-              ))}
-            </List>
-          ) : (
-            <Typography color="textSecondary" align="center" style={{ padding: '16px' }}>
-              No fields in this section. Click "Add Field" to add content.
-            </Typography>
-          )}
-          
-          <Button
-            variant="outlined"
-            color="primary"
-            startIcon={<AddIcon />}
-            className={classes.addBlockButton}
-            onClick={(e) => {
-              e.stopPropagation();
-              onAddBlock(group.id);
-            }}
-          >
-            Add Field
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-};
 
 function FormEditor() {
   const classes = useStyles();
   const { formId } = useParams();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const isEditMode = Boolean(formId);
   
   // Form state
@@ -336,13 +133,12 @@ function FormEditor() {
   const [loading, setLoading] = useState(isEditMode);
   const [error, setError] = useState('');
   const [blockEditorOpen, setBlockEditorOpen] = useState(false);
+  const [blockEditorMode, setBlockEditorMode] = useState('section');
   const [currentBlock, setCurrentBlock] = useState(null);
   const [currentBlockIndex, setCurrentBlockIndex] = useState(-1);
-  const [currentGroupId, setCurrentGroupId] = useState(null);
+  const [parentBlockIndex, setParentBlockIndex] = useState(-1);
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [revisionType, setRevisionType] = useState('minor');
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
-  const [blockEditorMode, setBlockEditorMode] = useState('addField');
   
   // Load form data if in edit mode
   useEffect(() => {
@@ -354,54 +150,7 @@ function FormEditor() {
         const formSnap = await getDoc(formRef);
         
         if (formSnap.exists()) {
-          const data = formSnap.data();
-          
-          // If there are blocks that aren't groups, restructure the form
-          let restructured = false;
-          const newBlocks = [];
-          
-          // First, collect all the group blocks
-          data.blocks.forEach(block => {
-			if (block.type === 'group') {
-              // Ensure group has a children array
-              if (!block.children) block.children = [];
-              newBlocks.push(block);
-            }
-          });
-          
-          // If no groups found, create a default group
-          if (newBlocks.length === 0) {
-            const defaultGroup = {
-              id: `group-${Date.now()}`,
-              type: 'group',
-              title: 'Section 1',
-              description: 'Default section',
-              children: []
-            };
-            
-            // Add non-group blocks as children of the default group
-            data.blocks.forEach(block => {
-              if (block.type !== 'group') {
-                restructured = true;
-                defaultGroup.children.push({
-                  ...block,
-                  parentId: defaultGroup.id
-                });
-              }
-            });
-            
-            newBlocks.push(defaultGroup);
-          }
-          
-          // If we restructured, update the blocks
-          if (restructured) {
-            setFormData({
-              ...data,
-              blocks: newBlocks
-            });
-          } else {
-            setFormData(data);
-          }
+          setFormData(formSnap.data());
         } else {
           setError('Form not found');
           navigate('/admin/dashboard');
@@ -417,14 +166,14 @@ function FormEditor() {
     if (isEditMode) {
       loadFormData();
     } else {
-      // For new forms, start with at least one group
+      // If it's a new form, add a default group
       setFormData({
         ...formData,
         blocks: [{
           id: `group-${Date.now()}`,
           type: 'group',
           title: 'Section 1',
-          description: 'Enter section description here',
+          description: '',
           children: []
         }]
       });
@@ -452,194 +201,185 @@ function FormEditor() {
     });
   };
   
-  // Handle moving blocks
-  const moveBlock = useCallback((fromIndex, toIndex, fromGroupId, toGroupId) => {
-    setFormData(prevForm => {
-      const newForm = { ...prevForm };
-      
-      // Moving within the same group
-      if (fromGroupId && fromGroupId === toGroupId) {
-        const blocks = [...newForm.blocks];
-        const groupIndex = blocks.findIndex(block => block.id === fromGroupId);
-        
-        if (groupIndex !== -1) {
-          const children = [...blocks[groupIndex].children];
-          const [movedBlock] = children.splice(fromIndex, 1);
-          children.splice(toIndex, 0, movedBlock);
-          
-          blocks[groupIndex] = {
-            ...blocks[groupIndex],
-            children
-          };
-          
-          return { ...newForm, blocks };
-        }
-      }
-      
-      return prevForm;
-    });
-  }, []);
-  
-  // Handle moving groups
-  const moveGroup = useCallback((fromIndex, toIndex) => {
-    setFormData(prevForm => {
-      const blocks = [...prevForm.blocks];
-      const [movedGroup] = blocks.splice(fromIndex, 1);
-      blocks.splice(toIndex, 0, movedGroup);
-      return { ...prevForm, blocks };
-    });
-  }, []);
-  
-  // Open block editor for adding a field within a group
-  const handleAddBlock = (groupId) => {
-    if (!groupId) {
-      setError("Fields can only be added inside a group. Please create a group first.");
-      return;
-    }
-    
-    setCurrentBlock({
-      type: 'field',
-      title: '',
-      parentId: groupId
-    });
-    setCurrentBlockIndex(-1);
-    setCurrentGroupId(groupId);
-    setBlockEditorMode('addField');
-    setBlockEditorOpen(true);
-  };
-  
-  // Add a new group
-  const handleAddGroup = () => {
+  // Open section editor (add group)
+  const handleAddSection = () => {
+    setBlockEditorMode('section');
     setCurrentBlock({
       type: 'group',
       title: '',
-      description: '',
-      children: []
     });
     setCurrentBlockIndex(-1);
-    setCurrentGroupId(null);
-    setBlockEditorMode('addSection');
+    setParentBlockIndex(-1);
+    setBlockEditorOpen(true);
+  };
+  
+  // Open block editor for adding a field or signature within a group
+  const handleAddBlockToGroup = (parentIndex) => {
+    setBlockEditorMode('field-or-signature');
+    setCurrentBlock({
+      type: 'field',
+      title: '',
+    });
+    setCurrentBlockIndex(-1);
+    setParentBlockIndex(parentIndex);
     setBlockEditorOpen(true);
   };
   
   // Edit existing block
-  const handleEditBlock = (block, index, groupId = null) => {
+  const handleEditBlock = (block, blockIndex, parentIndex = -1) => {
+    setBlockEditorMode(block.type === 'group' ? 'section' : 'field');
     setCurrentBlock({...block});
-    setCurrentBlockIndex(index);
-    setCurrentGroupId(groupId);
-    setBlockEditorMode(block.type === 'group' ? 'addSection' : 'addField');
+    setCurrentBlockIndex(blockIndex);
+    setParentBlockIndex(parentIndex);
     setBlockEditorOpen(true);
   };
   
   // Save block from editor
   const handleSaveBlock = (blockData) => {
-    setFormData(prevForm => {
-      const newForm = { ...prevForm };
-      
-      // If this is a group (top-level block)
-      if (blockData.type === 'group' && !blockData.parentId) {
-        // New group
-        if (currentBlockIndex === -1) {
-          // Ensure it has a children array
-          if (!blockData.children) blockData.children = [];
-          newForm.blocks = [...newForm.blocks, blockData];
-        }
-        // Update existing group
-        else {
-          const blocks = [...newForm.blocks];
-          // Preserve children when updating
-          if (blocks[currentBlockIndex].children) {
-            blockData.children = blocks[currentBlockIndex].children;
-          }
-          blocks[currentBlockIndex] = blockData;
-          newForm.blocks = blocks;
-        }
+    let updatedBlocks = [...formData.blocks];
+    
+    if (parentBlockIndex === -1) {
+      // We're dealing with a top-level block (section/group)
+      if (currentBlockIndex === -1) {
+        // Add new section
+        updatedBlocks.push({
+          ...blockData,
+          id: `group-${Date.now()}`,
+          children: []
+        });
+      } else {
+        // Update existing section
+        updatedBlocks[currentBlockIndex] = {
+          ...updatedBlocks[currentBlockIndex],
+          ...blockData
+        };
       }
-      // If this is a block inside a group
-      else if (blockData.parentId) {
-        const blocks = [...newForm.blocks];
-        const groupIndex = blocks.findIndex(block => block.id === blockData.parentId);
-        
-        if (groupIndex !== -1) {
-          const children = [...(blocks[groupIndex].children || [])];
-          
-          if (currentBlockIndex === -1) {
-            // Add new block to group
-            children.push(blockData);
-          } else {
-            // Update existing block in group
-            children[currentBlockIndex] = blockData;
-          }
-          
-          blocks[groupIndex] = {
-            ...blocks[groupIndex],
-            children
-          };
-          
-          newForm.blocks = blocks;
-        }
+    } else {
+      // We're dealing with a child block (field/signature)
+      const parentBlock = {...updatedBlocks[parentBlockIndex]};
+      const children = [...(parentBlock.children || [])];
+      
+      if (currentBlockIndex === -1) {
+        // Add new field to section
+        children.push({
+          ...blockData,
+          id: `block-${Date.now()}`
+        });
+      } else {
+        // Update existing field
+        children[currentBlockIndex] = {
+          ...children[currentBlockIndex],
+          ...blockData
+        };
       }
       
-      return newForm;
+      parentBlock.children = children;
+      updatedBlocks[parentBlockIndex] = parentBlock;
+    }
+    
+    setFormData({
+      ...formData,
+      blocks: updatedBlocks
     });
     
     setBlockEditorOpen(false);
     setCurrentBlock(null);
     setCurrentBlockIndex(-1);
-    setCurrentGroupId(null);
+    setParentBlockIndex(-1);
   };
   
   // Delete block
-  const handleDeleteBlock = (index, groupId = null) => {
-    // For groups, check if this is the last group
-    if (!groupId && formData.blocks.length <= 1) {
-      setError("Cannot delete the last section. Forms must have at least one section.");
-      return;
+  const handleDeleteBlock = (blockIndex, parentIndex = -1) => {
+    let updatedBlocks = [...formData.blocks];
+    
+    if (parentIndex === -1) {
+      // Don't allow deleting the last section
+      if (updatedBlocks.length <= 1) {
+        setError('Forms must have at least one section');
+        return;
+      }
+      
+      // Delete section
+      updatedBlocks = updatedBlocks.filter((_, i) => i !== blockIndex);
+    } else {
+      // Delete field from section
+      const parentBlock = {...updatedBlocks[parentIndex]};
+      const children = parentBlock.children.filter((_, i) => i !== blockIndex);
+      parentBlock.children = children;
+      updatedBlocks[parentIndex] = parentBlock;
     }
     
-    setFormData(prevForm => {
-      const newForm = { ...prevForm };
+    setFormData({
+      ...formData,
+      blocks: updatedBlocks
+    });
+  };
+  
+  // Move block up
+  const handleMoveBlockUp = (blockIndex, parentIndex = -1) => {
+    if (blockIndex === 0) return; // Already at the top
+    
+    let updatedBlocks = [...formData.blocks];
+    
+    if (parentIndex === -1) {
+      // Swap sections
+      [updatedBlocks[blockIndex - 1], updatedBlocks[blockIndex]] = 
+      [updatedBlocks[blockIndex], updatedBlocks[blockIndex - 1]];
+    } else {
+      // Swap fields within a section
+      const parentBlock = {...updatedBlocks[parentIndex]};
+      const children = [...parentBlock.children];
       
-      // Deleting a group
-      if (!groupId) {
-        const blocks = [...newForm.blocks];
-        blocks.splice(index, 1);
-        newForm.blocks = blocks;
-      }
-      // Deleting a block inside a group
-      else {
-        const blocks = [...newForm.blocks];
-        const groupIndex = blocks.findIndex(block => block.id === groupId);
-        
-        if (groupIndex !== -1) {
-          const children = [...blocks[groupIndex].children];
-          children.splice(index, 1);
-          
-          blocks[groupIndex] = {
-            ...blocks[groupIndex],
-            children
-          };
-          
-          newForm.blocks = blocks;
-        }
-      }
+      [children[blockIndex - 1], children[blockIndex]] = 
+      [children[blockIndex], children[blockIndex - 1]];
       
-      return newForm;
+      parentBlock.children = children;
+      updatedBlocks[parentIndex] = parentBlock;
+    }
+    
+    setFormData({
+      ...formData,
+      blocks: updatedBlocks
+    });
+  };
+  
+  // Move block down
+  const handleMoveBlockDown = (blockIndex, parentIndex = -1) => {
+    let updatedBlocks = [...formData.blocks];
+    
+    if (parentIndex === -1) {
+      // Can't move past the end
+      if (blockIndex >= updatedBlocks.length - 1) return;
+      
+      // Swap sections
+      [updatedBlocks[blockIndex], updatedBlocks[blockIndex + 1]] = 
+      [updatedBlocks[blockIndex + 1], updatedBlocks[blockIndex]];
+    } else {
+      // Swap fields within a section
+      const parentBlock = {...updatedBlocks[parentIndex]};
+      const children = [...parentBlock.children];
+      
+      // Can't move past the end
+      if (blockIndex >= children.length - 1) return;
+      
+      [children[blockIndex], children[blockIndex + 1]] = 
+      [children[blockIndex + 1], children[blockIndex]];
+      
+      parentBlock.children = children;
+      updatedBlocks[parentIndex] = parentBlock;
+    }
+    
+    setFormData({
+      ...formData,
+      blocks: updatedBlocks
     });
   };
   
   // Save form as draft
   const handleSaveDraft = async () => {
     try {
-      // Validate form
       if (!formData.title) {
         setError('Form title is required');
-        return;
-      }
-      
-      // Validate that there's at least one group
-      if (formData.blocks.length === 0) {
-        setError('Form must have at least one section');
         return;
       }
       
@@ -674,24 +414,18 @@ function FormEditor() {
   
   // Open publish dialog
   const handlePublishClick = () => {
-    // Validate form before opening dialog
-    if (!formData.title) {
-      setError('Form title is required');
-      return;
-    }
-    
-    // Validate that there's at least one group
-    if (formData.blocks.length === 0) {
-      setError('Form must have at least one section');
-      return;
-    }
-    
     setPublishDialogOpen(true);
   };
   
   // Publish form
   const handlePublishForm = async () => {
     try {
+      if (!formData.title) {
+        setError('Form title is required');
+        setPublishDialogOpen(false);
+        return;
+      }
+      
       // Calculate new revision number
       let newRevision = formData.revision || '1.0';
       if (formData.published) {
@@ -734,50 +468,47 @@ function FormEditor() {
   const handleCancelPublish = () => {
     setPublishDialogOpen(false);
   };
-  
-  // Confirm cancel editing
-  const handleCancelClick = () => {
-    setCancelDialogOpen(true);
-  };
-  
-  // Confirm cancel and navigate away
-  const confirmCancel = () => {
-    setCancelDialogOpen(false);
-    navigate('/admin/dashboard');
-  };
-  
-  // Close cancel dialog
-  const closeCancel = () => {
-    setCancelDialogOpen(false);
-  };
+
+  // Mobile warning for admin functions
+  if (isMobile) {
+    return (
+      <Container className={classes.content}>
+        <Paper className={classes.mobileWarning}>
+          <Typography variant="h6" gutterBottom>
+            Desktop Required
+          </Typography>
+          <Typography variant="body1">
+            Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
   
   if (loading) {
     return (
-      <div className={classes.root}>
+      <Container className={classes.content}>
         <Typography variant="h6">Loading...</Typography>
-      </div>
+      </Container>
     );
   }
   
   return (
     <div className={classes.root}>
-      <Card className={classes.paper}>
-        <CardContent>
-          <Typography variant="h5" gutterBottom>
+      <Container className={classes.content}>
+        {/* Form Header */}
+        <div className={classes.header}>
+          <Typography variant="h4" className={classes.title}>
             {isEditMode ? 'Edit Form' : 'Create New Form'}
           </Typography>
-          
-          {error && (
-            <Typography color="error" component="div" className={classes.formSection}>
-              {error}
-            </Typography>
-          )}
           
           <div className={classes.actionButtons}>
             <Button 
               variant="outlined"
               color="default"
-              onClick={handleCancelClick}
+              size="large"
+              startIcon={<CancelIcon />}
+              onClick={() => navigate('/admin/dashboard')}
             >
               Cancel
             </Button>
@@ -785,6 +516,7 @@ function FormEditor() {
             <Button 
               variant="outlined"
               color="primary"
+              size="large"
               startIcon={<SaveIcon />}
               onClick={handleSaveDraft}
             >
@@ -794,131 +526,264 @@ function FormEditor() {
             <Button 
               variant="contained"
               color="primary"
+              size="large"
               startIcon={<PublishIcon />}
               onClick={handlePublishClick}
             >
               Publish
             </Button>
           </div>
+        </div>
+
+        {error && (
+          <Typography color="error" component="div" className={classes.formSection}>
+            {error}
+          </Typography>
+        )}
+        
+        {/* Form Header Section */}
+        <Paper className={classes.paper}>
+          <Typography variant="h5" gutterBottom>
+            Form Details
+          </Typography>
           
-          {/* Form Header Section */}
-          <Paper className={classes.paper}>
-            <Typography variant="h6" gutterBottom>
-              Form Details
-            </Typography>
-            
-            <TextField
-              fullWidth
-              required
-              margin="normal"
-              label="Form Title"
-              name="title"
-              value={formData.title}
-              onChange={handleInputChange}
-              variant="outlined"
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Form Description/Instructions"
-              name="description"
-              value={formData.description}
-              onChange={handleInputChange}
-              variant="outlined"
-              multiline
-              rows={3}
-            />
-            
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Department"
-              name="department"
-              value={formData.department}
-              onChange={handleInputChange}
-              variant="outlined"
-            />
-            
-            {formData.published && (
-              <div className={classes.revisionControl}>
-                <Typography variant="subtitle2" gutterBottom>
-                  Current Revision: {formData.revision || '1.0'}
-                </Typography>
-                
-                <FormControl component="fieldset" className={classes.formSection}>
-                  <FormLabel component="legend">Revision Type for Next Save</FormLabel>
-                  <RadioGroup 
-                    row 
-                    value={revisionType} 
-                    onChange={(e) => setRevisionType(e.target.value)}
-                  >
-                    <FormControlLabel 
-                      value="minor" 
-                      control={<Radio color="primary" />} 
-                      label={`Minor Revision (Next: ${getNextRevision('minor')})`} 
-                    />
-                    <FormControlLabel 
-                      value="major" 
-                      control={<Radio color="primary" />} 
-                      label={`Major Revision (Next: ${getNextRevision('major')})`} 
-                    />
-                  </RadioGroup>
-                </FormControl>
-              </div>
-            )}
-          </Paper>
+          <TextField
+            fullWidth
+            required
+            margin="normal"
+            label="Form Title"
+            name="title"
+            value={formData.title}
+            onChange={handleInputChange}
+            variant="outlined"
+          />
           
-          {/* Form Sections */}
-          <Box mt={4} mb={2}>
-            <Typography variant="h6" gutterBottom>
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Form Description/Instructions"
+            name="description"
+            value={formData.description}
+            onChange={handleInputChange}
+            variant="outlined"
+            multiline
+            rows={3}
+          />
+          
+          <TextField
+            fullWidth
+            margin="normal"
+            label="Department"
+            name="department"
+            value={formData.department}
+            onChange={handleInputChange}
+            variant="outlined"
+          />
+          
+          {formData.published && (
+            <div className={classes.revisionControl}>
+              <Typography variant="subtitle2" gutterBottom>
+                Current Revision: {formData.revision || '1.0'}
+              </Typography>
+              
+              <FormControl component="fieldset" className={classes.formSection}>
+                <FormLabel component="legend">Revision Type for Next Save</FormLabel>
+                <RadioGroup 
+                  row 
+                  value={revisionType} 
+                  onChange={(e) => setRevisionType(e.target.value)}
+                >
+                  <FormControlLabel 
+                    value="minor" 
+                    control={<Radio color="primary" />} 
+                    label={`Minor Revision (Next: ${getNextRevision('minor')})`} 
+                  />
+                  <FormControlLabel 
+                    value="major" 
+                    control={<Radio color="primary" />} 
+                    label={`Major Revision (Next: ${getNextRevision('major')})`} 
+                  />
+                </RadioGroup>
+              </FormControl>
+            </div>
+          )}
+        </Paper>
+        
+        {/* Sections Section */}
+        <Paper className={classes.paper}>
+          <div className={classes.formSection}>
+            <Typography variant="h5" gutterBottom>
               Form Structure
             </Typography>
             
-            <Typography variant="body2" color="textSecondary" paragraph>
-              Add sections to organize your form. Each section can contain fields and signature blocks.
+            <Typography variant="subtitle2" gutterBottom>
+              Add sections to organize your form, then add fields within each section.
             </Typography>
-            
-            {/* Group Blocks */}
-            {formData.blocks.map((block, index) => (
-              block.type === 'group' && (
-                <GroupBlock
-                  key={block.id || index}
-                  group={block}
-                  index={index}
-                  moveBlock={moveBlock}
-                  moveGroup={moveGroup}
-                  onEdit={handleEditBlock}
-                  onDelete={handleDeleteBlock}
-                  onAddBlock={handleAddBlock}
-                  isFirst={index === 0}
-                  isLast={index === formData.blocks.length - 1}
-                />
-              )
+          </div>
+          
+          <List className={classes.blockList}>
+            {formData.blocks.map((block, blockIndex) => (
+              <React.Fragment key={block.id || blockIndex}>
+                {/* Section (Group) */}
+                <ListItem 
+                  className={classes.blockItem}
+                  button
+                  onClick={() => handleEditBlock(block, blockIndex)}
+                >
+                  <ListItemText
+                    primary={
+                      <Typography variant="subtitle1">
+                        <b>Section {blockIndex + 1}:</b> {block.title || 'Untitled Section'}
+                      </Typography>
+                    }
+                    secondary={block.description || ''}
+                  />
+                  
+                  <ListItemSecondaryAction className={classes.blockActions}>
+                    <IconButton 
+                      edge="end" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMoveBlockUp(blockIndex);
+                      }}
+                      disabled={blockIndex === 0}
+                    >
+                      <ArrowUpIcon />
+                    </IconButton>
+                    
+                    <IconButton 
+                      edge="end" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleMoveBlockDown(blockIndex);
+                      }}
+                      disabled={blockIndex === formData.blocks.length - 1}
+                    >
+                      <ArrowDownIcon />
+                    </IconButton>
+                    
+                    <IconButton 
+                      edge="end" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleEditBlock(block, blockIndex);
+                      }}
+                    >
+                      <EditIcon />
+                    </IconButton>
+                    
+                    <IconButton 
+                      edge="end" 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteBlock(blockIndex);
+                      }}
+                      disabled={formData.blocks.length <= 1}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+                
+                {/* Fields within Section */}
+                {block.children && block.children.map((childBlock, childIndex) => (
+                  <ListItem 
+                    key={childBlock.id || `${blockIndex}-${childIndex}`}
+                    className={`${classes.blockItem} ${classes.nestedBlock}`}
+                    button
+                    onClick={() => handleEditBlock(childBlock, childIndex, blockIndex)}
+                  >
+                    <ListItemText
+                      primary={
+                        <Typography variant="body1">
+                          {childBlock.title || 'Untitled Field'} ({childBlock.type})
+                        </Typography>
+                      }
+                      secondary={childBlock.description || ''}
+                    />
+                    
+                    <ListItemSecondaryAction>
+                      <IconButton 
+                        edge="end" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveBlockUp(childIndex, blockIndex);
+                        }}
+                        disabled={childIndex === 0}
+                      >
+                        <ArrowUpIcon />
+                      </IconButton>
+                      
+                      <IconButton 
+                        edge="end" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleMoveBlockDown(childIndex, blockIndex);
+                        }}
+                        disabled={childIndex === (block.children?.length || 0) - 1}
+                      >
+                        <ArrowDownIcon />
+                      </IconButton>
+                      
+                      <IconButton 
+                        edge="end" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditBlock(childBlock, childIndex, blockIndex);
+                        }}
+                      >
+                        <EditIcon />
+                      </IconButton>
+                      
+                      <IconButton 
+                        edge="end" 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteBlock(childIndex, blockIndex);
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </ListItemSecondaryAction>
+                  </ListItem>
+                ))}
+                
+                {/* Add Field/Signature Button */}
+                <Box ml={4} mb={2}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    size="small"
+                    startIcon={<AddIcon />}
+                    className={classes.addBlockButton}
+                    onClick={() => handleAddBlockToGroup(blockIndex)}
+                  >
+                    Add Field or Signature
+                  </Button>
+                </Box>
+              </React.Fragment>
             ))}
-            
-            {/* Only show Add Section button */}
-            <Button
-              variant="contained"
-              color="primary"
-              startIcon={<AddIcon />}
-              className={classes.addGroupButton}
-              onClick={handleAddGroup}
-            >
-              Add Section
-            </Button>
-          </Box>
-        </CardContent>
-      </Card>
+          </List>
+          
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            className={classes.addBlockButton}
+            onClick={handleAddSection}
+          >
+            Add Section
+          </Button>
+        </Paper>
+      </Container>
       
       {/* Block Editor Dialog */}
       <BlockEditor
         open={blockEditorOpen}
         block={currentBlock}
+        mode={blockEditorMode}
         onSave={handleSaveBlock}
         onClose={() => setBlockEditorOpen(false)}
-        parentId={currentGroupId}
-        mode={blockEditorMode}
       />
       
       {/* Publish Confirmation Dialog */}
@@ -948,24 +813,6 @@ function FormEditor() {
           </Button>
           <Button onClick={handlePublishForm} color="primary" autoFocus>
             Publish
-          </Button>
-        </DialogActions>
-      </Dialog>
-      
-      {/* Cancel Confirmation Dialog */}
-      <Dialog open={cancelDialogOpen} onClose={closeCancel}>
-        <DialogTitle>Discard Changes?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            Are you sure you want to cancel? Any unsaved changes will be lost.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={closeCancel} color="primary">
-            Continue Editing
-          </Button>
-          <Button onClick={confirmCancel} color="secondary">
-            Discard Changes
           </Button>
         </DialogActions>
       </Dialog>

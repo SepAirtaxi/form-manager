@@ -50,7 +50,7 @@ const useStyles = makeStyles((theme) => ({
   }
 }));
 
-// Updated field type options with multi_choice
+// Field type options
 const fieldTypes = [
   { value: 'short_text', label: 'Short text field' },
   { value: 'long_text', label: 'Long text area' },
@@ -62,7 +62,7 @@ const fieldTypes = [
   { value: 'dropdown', label: 'Dropdown menu' }
 ];
 
-function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
+function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
   const classes = useStyles();
   const [formData, setFormData] = useState({
     type: 'field', // Default type
@@ -79,46 +79,65 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
       maxValue: '',
       units: ''
     },
-    newOption: '', // Temporary state for adding options
-    parentId: null // Reference to parent group if applicable
+    newOption: '' // Temporary state for adding options
   });
   
-  // Update form when block changes
+  // Update form when block or mode changes
   useEffect(() => {
     if (block) {
-      setFormData({
-        type: block.type || (mode === 'addSection' ? 'group' : 'field'),
-        title: block.title || '',
-        description: block.description || '',
-        fieldType: block.fieldType || 'short_text',
-        required: block.required || false,
-        options: block.options || [],
-        validation: block.validation || {
-          minLength: '',
-          maxLength: '',
-          pattern: '',
-          minValue: '',
-          maxValue: '',
-          units: ''
-        },
-        newOption: '',
-        parentId: block.parentId || parentId || null
-      });
-    } else if (parentId) {
-      // If creating a new block inside a group
-      setFormData(prev => ({
-        ...prev,
-        type: mode === 'addSection' ? 'group' : 'field',
-        parentId: parentId
-      }));
-    } else {
-      // Creating a new top-level block (only groups allowed)
-      setFormData(prev => ({
-        ...prev,
-        type: 'group'
-      }));
+      if (mode === 'section') {
+        // Force group type for sections
+        setFormData({
+          ...block,
+          type: 'group',
+          newOption: ''
+        });
+      } else if (mode === 'field') {
+        // Force field type for fields within sections
+        setFormData({
+          ...block,
+          type: 'field',
+          fieldType: block.fieldType || 'short_text',
+          required: block.required || false,
+          options: block.options || [],
+          validation: block.validation || {
+            minLength: '',
+            maxLength: '',
+            pattern: '',
+            minValue: '',
+            maxValue: '',
+            units: ''
+          },
+          newOption: ''
+        });
+      } else if (mode === 'signature') {
+        // Force signature type for signatures
+        setFormData({
+          ...block,
+          type: 'signature',
+          newOption: ''
+        });
+      } else if (mode === 'field-or-signature') {
+        // Allow field or signature types
+        setFormData({
+          ...block,
+          type: block.type || 'field',
+          fieldType: block.fieldType || 'short_text',
+          required: block.required || false,
+          options: block.options || [],
+          validation: block.validation || {
+            minLength: '',
+            maxLength: '',
+            pattern: '',
+            minValue: '',
+            maxValue: '',
+            units: ''
+          },
+          newOption: ''
+        });
+      }
     }
-  }, [block, parentId, mode]);
+  }, [block, mode]);
   
   // Handle input changes
   const handleInputChange = (e) => {
@@ -169,11 +188,9 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
   const handleSave = () => {
     // Create a clean block object to save
     const blockToSave = {
-      id: block?.id || `block-${Date.now()}`, // Generate an ID if not editing
       type: formData.type,
       title: formData.title,
-      description: formData.description,
-      parentId: formData.parentId
+      description: formData.description
     };
     
     // Add type-specific properties
@@ -181,7 +198,7 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
       blockToSave.fieldType = formData.fieldType;
       blockToSave.required = formData.required;
       
-      // Add options for multiple choice/dropdown/multi-choice
+      // Add options for multiple choice/dropdown
       if (['radio', 'dropdown', 'multi_choice'].includes(formData.fieldType)) {
         blockToSave.options = formData.options;
       }
@@ -216,28 +233,23 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
       }
     } else if (formData.type === 'signature') {
       blockToSave.includeDate = true; // Default behavior
-    } else if (formData.type === 'group') {
-      // For group blocks, initialize an empty children array if it doesn't exist
-      blockToSave.children = block?.children || [];
     }
     
     onSave(blockToSave);
   };
 
-  // Determine if this is creating a section or a field
-  const isAddingSection = mode === 'addSection' || (!parentId && !block?.parentId);
-  const isEditingExisting = block && block.id;
+  // Determine if we should show block type options
+  const showBlockTypeOptions = mode === 'field-or-signature';
   
-  // Get the appropriate title based on the context
+  // Title text based on mode and block type
   const getDialogTitle = () => {
-    if (isEditingExisting) {
-      if (formData.type === 'group') return 'Edit Section';
-      if (formData.type === 'signature') return 'Edit Signature Field';
-      return 'Edit Form Field';
-    } else {
-      if (isAddingSection) return 'Add New Section';
-      return 'Add New Field';
-    }
+    if (mode === 'section') return 'Add/Edit Section';
+    if (mode === 'field') return 'Add/Edit Field';
+    if (mode === 'signature') return 'Add/Edit Signature Field';
+    
+    // For field-or-signature mode
+    return formData.type === 'group' ? 'Section' : 
+           formData.type === 'signature' ? 'Signature Field' : 'Form Field';
   };
   
   return (
@@ -247,8 +259,8 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
       </DialogTitle>
       
       <DialogContent dividers>
-        {/* Block Type Selection - Only show if editing an existing field or adding a field inside group */}
-        {!isAddingSection && !formData.type === 'group' && (
+        {/* Block Type Selection - only show in field-or-signature mode */}
+        {showBlockTypeOptions && (
           <FormControl className={classes.formSection} fullWidth margin="normal">
             <InputLabel>Block Type</InputLabel>
             <Select
@@ -286,7 +298,7 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
           />
         </div>
         
-        {formData.type !== 'group' && <Divider className={classes.divider} />}
+        <Divider className={classes.divider} />
         
         {/* Field-specific options */}
         {formData.type === 'field' && (
@@ -390,8 +402,8 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
                 </>
               )}
               
-              {/* Multiple choice/dropdown/multi-choice options */}
-              {(['radio', 'dropdown', 'multi_choice'].includes(formData.fieldType)) && (
+              {/* Multiple choice/dropdown options */}
+              {(formData.fieldType === 'radio' || formData.fieldType === 'dropdown' || formData.fieldType === 'multi_choice') && (
                 <div className={classes.formSection}>
                   <Typography variant="subtitle2" gutterBottom>
                     Options
@@ -429,12 +441,6 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
                       ))}
                     </List>
                   )}
-                  
-                  {formData.options.length === 0 && (
-                    <Typography variant="body2" color="textSecondary">
-                      No options added yet. Add at least one option.
-                    </Typography>
-                  )}
                 </div>
               )}
             </div>
@@ -461,18 +467,6 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
             />
           </div>
         )}
-        
-        {/* Group Block Options */}
-        {formData.type === 'group' && (
-          <div className={classes.formSection}>
-            <Typography variant="subtitle2" gutterBottom>
-              Sections contain fields and signature blocks. Each form must have at least one section.
-            </Typography>
-            <Typography variant="body2" color="textSecondary">
-              You can add fields and signature blocks to this section after creating it.
-            </Typography>
-          </div>
-        )}
       </DialogContent>
       
       <DialogActions>
@@ -480,7 +474,7 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
           Cancel
         </Button>
         <Button onClick={handleSave} color="primary" disabled={!formData.title}>
-          Save
+          Save Block
         </Button>
       </DialogActions>
     </Dialog>
@@ -490,10 +484,9 @@ function BlockEditor({ open, block, onSave, onClose, parentId, mode }) {
 BlockEditor.propTypes = {
   open: PropTypes.bool.isRequired,
   block: PropTypes.object,
+  mode: PropTypes.oneOf(['section', 'field', 'signature', 'field-or-signature']),
   onSave: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired,
-  parentId: PropTypes.string, // Optional parent group ID when creating blocks inside a group
-  mode: PropTypes.oneOf(['addSection', 'addField']) // Optional mode to restrict block types
+  onClose: PropTypes.func.isRequired
 };
 
 export default BlockEditor;

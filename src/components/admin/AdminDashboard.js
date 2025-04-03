@@ -1,7 +1,7 @@
 // src/components/admin/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { collection, getDocs, doc, deleteDoc, query, orderBy } from 'firebase/firestore';
+import { Link } from 'react-router-dom';
+import { collection, getDocs, doc, deleteDoc, query, orderBy, where } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -28,7 +28,11 @@ import {
   CardContent,
   CardActions,
   Chip,
-  makeStyles
+  Divider,
+  Hidden,
+  useMediaQuery,
+  makeStyles,
+  useTheme
 } from '@material-ui/core';
 import {
   Add as AddIcon,
@@ -46,17 +50,14 @@ const useStyles = makeStyles((theme) => ({
     flexGrow: 1,
     padding: theme.spacing(3),
   },
+  pageTitle: {
+    marginBottom: theme.spacing(4),
+  },
   button: {
     margin: theme.spacing(1),
   },
   tableContainer: {
     marginTop: theme.spacing(3),
-  },
-  welcomeSection: {
-    marginBottom: theme.spacing(4),
-    padding: theme.spacing(3),
-    backgroundColor: theme.palette.primary.light,
-    color: theme.palette.primary.contrastText,
   },
   card: {
     height: '100%',
@@ -76,41 +77,76 @@ const useStyles = makeStyles((theme) => ({
   draftChip: {
     backgroundColor: theme.palette.warning.main,
     marginLeft: theme.spacing(1),
+  },
+  mobileWarning: {
+    padding: theme.spacing(3),
+    margin: theme.spacing(2),
+    backgroundColor: theme.palette.warning.light,
+    borderRadius: theme.shape.borderRadius,
+    textAlign: 'center',
+  },
+  submissionsSection: {
+    marginTop: theme.spacing(4),
+    marginBottom: theme.spacing(4),
+  },
+  submissionItem: {
+    padding: theme.spacing(2),
   }
 }));
 
 function AdminDashboard() {
   const classes = useStyles();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [forms, setForms] = useState([]);
+  const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [formToDelete, setFormToDelete] = useState(null);
-  const { currentUser, userRole, hasRole } = useAuth();
-  const navigate = useNavigate();
+  const { currentUser, hasRole } = useAuth();
 
-  // Load forms on component mount
+  // Load forms and recent submissions on component mount
   useEffect(() => {
-    async function loadForms() {
+    async function loadData() {
       try {
+        // Load forms
         const formsQuery = query(collection(db, 'forms'), orderBy('updatedAt', 'desc'));
-        const querySnapshot = await getDocs(formsQuery);
+        const formsSnapshot = await getDocs(formsQuery);
         
-        const formsData = querySnapshot.docs.map(doc => ({
+        const formsData = formsSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
         
         setForms(formsData);
+        
+        // Load recent submissions
+        const submissionsQuery = query(
+          collection(db, 'submissions'),
+          where('status', '==', 'submitted'),
+          orderBy('submittedAt', 'desc')
+        );
+        
+        const submissionsSnapshot = await getDocs(submissionsQuery);
+        
+        const submissionsData = submissionsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).slice(0, 10); // Get only the 10 most recent
+        
+        setSubmissions(submissionsData);
+        
       } catch (err) {
-        setError('Error loading forms: ' + err.message);
+        setError('Error loading data: ' + err.message);
         console.error(err);
       } finally {
         setLoading(false);
       }
     }
     
-    loadForms();
+    loadData();
   }, []);
 
   // Handle form deletion
@@ -144,17 +180,27 @@ function AdminDashboard() {
     console.log('Duplicate form', form.id);
   };
 
+  // Mobile warning for admin functions
+  if (isMobile) {
+    return (
+      <Container className={classes.content}>
+        <Paper className={classes.mobileWarning}>
+          <Typography variant="h6" gutterBottom>
+            Desktop Required
+          </Typography>
+          <Typography variant="body1">
+            Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
+
   return (
     <Container className={classes.content}>
-      <Paper className={classes.welcomeSection}>
-        <Typography variant="h4" gutterBottom>
-          Admin Dashboard
-        </Typography>
-        <Typography variant="body1">
-          Welcome to the administrative dashboard, {currentUser?.displayName || 'User'}. 
-          Your role is: <strong style={{ textTransform: 'capitalize' }}>{userRole}</strong>
-        </Typography>
-      </Paper>
+      <Typography variant="h4" className={classes.pageTitle}>
+        Admin Dashboard
+      </Typography>
 
       {error && (
         <Typography color="error">
@@ -276,6 +322,47 @@ function AdminDashboard() {
         )}
       </Grid>
 
+      {/* Recent Submissions Section */}
+      {submissions.length > 0 && (
+        <div className={classes.submissionsSection}>
+          <Typography variant="h5" gutterBottom>
+            Recent Submissions
+          </Typography>
+          
+          <Paper>
+            {submissions.map((submission, index) => (
+              <div key={submission.id}>
+                <Grid container spacing={2} className={classes.submissionItem}>
+                  <Grid item xs={8}>
+                    <Typography variant="subtitle1">
+                      {submission.formTitle}
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary">
+                      Submitted by: {submission.userName || 'Unknown user'}
+                      <br />
+                      Date: {submission.submittedAt ? new Date(submission.submittedAt.toDate()).toLocaleString() : 'Unknown'}
+                    </Typography>
+                  </Grid>
+                  <Grid item xs={4} style={{ textAlign: 'right' }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      color="primary"
+                      component={Link}
+                      to={`/submission/${submission.id}`}
+                    >
+                      View Details
+                    </Button>
+                  </Grid>
+                </Grid>
+                {index < submissions.length - 1 && <Divider />}
+              </div>
+            ))}
+          </Paper>
+        </div>
+      )}
+
+      {/* Form Management Section */}
       <Typography variant="h5" gutterBottom>
         Form Management
       </Typography>

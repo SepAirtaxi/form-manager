@@ -1,5 +1,6 @@
 // src/components/admin/SignatureManager.js
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, deleteDoc, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -19,9 +20,9 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
-  Fab,
-  makeStyles
+  useMediaQuery,
+  makeStyles,
+  useTheme
 } from '@material-ui/core';
 import {
   Add as AddIcon,
@@ -33,6 +34,10 @@ const useStyles = makeStyles((theme) => ({
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
+    maxWidth: '1000px',
+  },
+  pageTitle: {
+    marginBottom: theme.spacing(4),
   },
   card: {
     height: '100%',
@@ -49,6 +54,9 @@ const useStyles = makeStyles((theme) => ({
   signatureTitle: {
     fontWeight: 'bold',
   },
+  addButton: {
+    marginBottom: theme.spacing(3),
+  },
   form: {
     '& > *': {
       margin: theme.spacing(1),
@@ -59,18 +67,20 @@ const useStyles = makeStyles((theme) => ({
     maxHeight: '150px',
     marginTop: theme.spacing(2),
   },
-  fab: {
-    position: 'fixed',
-    bottom: theme.spacing(2),
-    right: theme.spacing(2),
-  },
-  title: {
-    marginBottom: theme.spacing(3),
+  mobileWarning: {
+    padding: theme.spacing(3),
+    margin: theme.spacing(2),
+    backgroundColor: theme.palette.warning.light,
+    borderRadius: theme.shape.borderRadius,
+    textAlign: 'center',
   }
 }));
 
 function SignatureManager() {
   const classes = useStyles();
+  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const [signatures, setSignatures] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -304,12 +314,38 @@ function SignatureManager() {
     setError('');
   };
 
+  // Mobile warning for admin functions
+  if (isMobile) {
+    return (
+      <Container className={classes.container}>
+        <Paper className={classes.mobileWarning}>
+          <Typography variant="h6" gutterBottom>
+            Desktop Required
+          </Typography>
+          <Typography variant="body1">
+            Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
+
   // Render function
   return (
     <Container className={classes.container}>
-      <Typography variant="h4" gutterBottom className={classes.title}>
-        Authorized Signatories
+      <Typography variant="h4" className={classes.pageTitle}>
+        Signature Management
       </Typography>
+      
+      <Button 
+        variant="contained" 
+        color="primary" 
+        startIcon={<AddIcon />}
+        onClick={handleAddClick}
+        className={classes.addButton}
+      >
+        Add Signature
+      </Button>
       
       <Typography variant="body1" paragraph>
         Manage the list of personnel authorized to sign forms. Signatures will be available for selection when completing forms.
@@ -376,16 +412,6 @@ function SignatureManager() {
           )}
         </Grid>
       )}
-      
-      {/* Floating action button to add new signature */}
-      <Fab 
-        color="primary" 
-        className={classes.fab}
-        onClick={handleAddClick}
-        aria-label="add signature"
-      >
-        <AddIcon />
-      </Fab>
       
       {/* Add/Edit Signature Dialog */}
       <Dialog open={dialogOpen} onClose={handleClose} maxWidth="sm" fullWidth>

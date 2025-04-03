@@ -1,6 +1,5 @@
 // src/components/admin/UserManager.js
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { collection, getDocs, doc, updateDoc, query, orderBy, deleteDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,20 +28,26 @@ import {
   Select,
   MenuItem,
   Snackbar,
-  Fab,
-  makeStyles
+  useMediaQuery,
+  makeStyles,
+  useTheme
 } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 import {
   Add as AddIcon,
   Edit as EditIcon,
-  Delete as DeleteIcon
+  Delete as DeleteIcon,
+  Save as SaveIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
+    maxWidth: '1000px',
+  },
+  pageTitle: {
+    marginBottom: theme.spacing(4),
   },
   tableContainer: {
     marginTop: theme.spacing(3),
@@ -55,19 +60,23 @@ const useStyles = makeStyles((theme) => ({
       margin: theme.spacing(1),
     },
   },
-  title: {
+  addButton: {
     marginBottom: theme.spacing(3),
   },
-  fab: {
-    position: 'fixed',
-    bottom: theme.spacing(2),
-    right: theme.spacing(2),
-  },
+  mobileWarning: {
+    padding: theme.spacing(3),
+    margin: theme.spacing(2),
+    backgroundColor: theme.palette.warning.light,
+    borderRadius: theme.shape.borderRadius,
+    textAlign: 'center',
+  }
 }));
 
 function UserManager() {
   const classes = useStyles();
-  const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const { createUser, userRole, updateUserRole } = useAuth();
   
   const [users, setUsers] = useState([]);
@@ -252,12 +261,38 @@ function UserManager() {
   const handleErrorClose = () => {
     setError('');
   };
+
+  // Mobile warning for admin functions
+  if (isMobile) {
+    return (
+      <Container className={classes.container}>
+        <Paper className={classes.mobileWarning}>
+          <Typography variant="h6" gutterBottom>
+            Desktop Required
+          </Typography>
+          <Typography variant="body1">
+            Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
   
   return (
     <Container className={classes.container}>
-      <Typography variant="h4" component="h1" gutterBottom className={classes.title}>
+      <Typography variant="h4" className={classes.pageTitle}>
         User Management
       </Typography>
+      
+      <Button
+        variant="contained"
+        color="primary"
+        startIcon={<AddIcon />}
+        onClick={handleAddClick}
+        className={classes.addButton}
+      >
+        Add User
+      </Button>
       
       <Paper className={classes.tableContainer}>
         <TableContainer>
@@ -311,16 +346,6 @@ function UserManager() {
           </Table>
         </TableContainer>
       </Paper>
-
-      {/* Floating action button to add user */}
-      <Fab
-        color="primary"
-        className={classes.fab}
-        onClick={handleAddClick}
-        aria-label="add user"
-      >
-        <AddIcon />
-      </Fab>
       
       {/* Add User Dialog */}
       <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)}>
@@ -379,7 +404,7 @@ function UserManager() {
           <Button onClick={() => setAddDialogOpen(false)} color="default">
             Cancel
           </Button>
-          <Button onClick={handleAddUser} color="primary">
+          <Button onClick={handleAddUser} color="primary" startIcon={<SaveIcon />}>
             Add User
           </Button>
         </DialogActions>
@@ -419,7 +444,7 @@ function UserManager() {
           <Button onClick={() => setEditDialogOpen(false)} color="default">
             Cancel
           </Button>
-          <Button onClick={handleUpdateUser} color="primary">
+          <Button onClick={handleUpdateUser} color="primary" startIcon={<SaveIcon />}>
             Update User
           </Button>
         </DialogActions>

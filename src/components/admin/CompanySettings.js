@@ -12,7 +12,9 @@ import {
   Button,
   Divider,
   Snackbar,
-  makeStyles
+  useMediaQuery,
+  makeStyles,
+  useTheme
 } from '@material-ui/core';
 import { Alert } from '@material-ui/lab';
 import {
@@ -24,6 +26,10 @@ const useStyles = makeStyles((theme) => ({
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
+    maxWidth: '900px',
+  },
+  pageTitle: {
+    marginBottom: theme.spacing(4),
   },
   paper: {
     padding: theme.spacing(3),
@@ -42,11 +48,20 @@ const useStyles = makeStyles((theme) => ({
   },
   saveButton: {
     marginTop: theme.spacing(3),
+  },
+  mobileWarning: {
+    padding: theme.spacing(3),
+    margin: theme.spacing(2),
+    backgroundColor: theme.palette.warning.light,
+    borderRadius: theme.shape.borderRadius,
+    textAlign: 'center',
   }
 }));
 
 function CompanySettings() {
   const classes = useStyles();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   const [formData, setFormData] = useState({
     name: 'Copenhagen AirTaxi / CAT Flyservice',
@@ -173,6 +188,22 @@ function CompanySettings() {
   const handleCloseSnackbar = () => {
     setSaved(false);
   };
+
+  // Mobile warning for admin functions
+  if (isMobile) {
+    return (
+      <Container className={classes.container}>
+        <Paper className={classes.mobileWarning}>
+          <Typography variant="h6" gutterBottom>
+            Desktop Required
+          </Typography>
+          <Typography variant="body1">
+            Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+          </Typography>
+        </Paper>
+      </Container>
+    );
+  }
   
   if (loading) {
     return (
@@ -184,7 +215,7 @@ function CompanySettings() {
   
   return (
     <Container className={classes.container}>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h4" className={classes.pageTitle}>
         Company Settings
       </Typography>
       

@@ -3,7 +3,6 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { collection, getDocs, query, where, orderBy } from 'firebase/firestore';
 import { db } from '../../firebase';
-import { useAuth } from '../../contexts/AuthContext';
 
 // Material UI imports
 import {
@@ -25,6 +24,9 @@ const useStyles = makeStyles((theme) => ({
   container: {
     paddingTop: theme.spacing(4),
     paddingBottom: theme.spacing(4),
+  },
+  pageTitle: {
+    marginBottom: theme.spacing(4),
   },
   card: {
     height: '100%',
@@ -50,7 +52,6 @@ const useStyles = makeStyles((theme) => ({
 
 function FormList() {
   const classes = useStyles();
-  const { currentUser } = useAuth();
   const [forms, setForms] = useState([]);
   const [filteredForms, setFilteredForms] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,7 +99,8 @@ function FormList() {
     } else {
       const filtered = forms.filter(form => 
         form.title.toLowerCase().includes(value.toLowerCase()) ||
-        (form.description && form.description.toLowerCase().includes(value.toLowerCase()))
+        (form.description && form.description.toLowerCase().includes(value.toLowerCase())) ||
+        (form.department && form.department.toLowerCase().includes(value.toLowerCase()))
       );
       setFilteredForms(filtered);
     }
@@ -106,8 +108,8 @@ function FormList() {
 
   return (
     <Container className={classes.container}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Available Forms
+      <Typography variant="h4" className={classes.pageTitle}>
+        Forms
       </Typography>
 
       {error && (
@@ -120,7 +122,7 @@ function FormList() {
         <TextField
           fullWidth
           variant="outlined"
-          placeholder="Search forms..."
+          placeholder="Search forms by title, description or department..."
           value={searchTerm}
           onChange={handleSearchChange}
           InputProps={{
@@ -152,6 +154,12 @@ function FormList() {
                   <Typography variant="body2" color="textSecondary" component="p">
                     {form.description || "No description provided."}
                   </Typography>
+                  
+                  {form.department && (
+                    <Typography variant="body2" color="textSecondary" style={{ marginTop: '8px' }}>
+                      Department: {form.department}
+                    </Typography>
+                  )}
                   
                   <Typography className={classes.formRevision}>
                     Revision: {form.revision || '1.0'}
