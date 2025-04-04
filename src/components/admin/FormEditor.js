@@ -4,6 +4,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp, collection } from 'firebase/firestore';
 import { db } from '../../firebase';
 import BlockEditor from './BlockEditor';
+import { useTheme, useMediaQuery } from '@material-ui/core';
 
 // Material UI imports
 import {
@@ -12,6 +13,7 @@ import {
   Typography,
   TextField,
   Button,
+  IconButton,
   Dialog,
   DialogActions,
   DialogContent,
@@ -30,13 +32,12 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  IconButton,
   Box,
-  useMediaQuery,
-  makeStyles,
-  useTheme
+  Tooltip,
+  makeStyles
 } from '@material-ui/core';
 import {
+  ArrowBack as ArrowBackIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -44,53 +45,58 @@ import {
   ArrowDownward as ArrowDownIcon,
   Save as SaveIcon,
   Publish as PublishIcon,
-  Cancel as CancelIcon
+  CreateNewFolder as CreateNewFolderIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
   root: {
     flexGrow: 1,
   },
-  content: {
-    padding: theme.spacing(3),
-    maxWidth: '900px',
-    margin: '0 auto',
-  },
-  header: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    marginBottom: theme.spacing(3),
-  },
   title: {
-    marginBottom: theme.spacing(2),
-  },
-  actionButtons: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: theme.spacing(2),
+    textAlign: 'center',
     marginBottom: theme.spacing(3),
   },
   paper: {
     padding: theme.spacing(3),
     marginBottom: theme.spacing(3),
+    maxWidth: '900px',
+    margin: '0 auto',
   },
   formSection: {
     marginBottom: theme.spacing(3),
   },
+  buttonsContainer: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginTop: theme.spacing(3),
+    marginBottom: theme.spacing(3),
+  },
   blockList: {
     marginTop: theme.spacing(2),
+    width: '100%'
+  },
+  blockItemContainer: {
+    width: '100%',
+    display: 'flex',
+    flexDirection: 'column'
   },
   blockItem: {
     border: `1px solid ${theme.palette.divider}`,
     marginBottom: theme.spacing(1),
     borderRadius: theme.shape.borderRadius,
+    width: '100%',
+    boxSizing: 'border-box'
   },
-  nestedBlock: {
+  nestedSection: {
     marginLeft: theme.spacing(4),
+    width: 'calc(100% - 32px)'
   },
-  blockActions: {
-    display: 'flex',
+  nestedNestedSection: {
+    marginLeft: theme.spacing(8),
+    width: 'calc(100% - 64px)'
+  },
+  actionButton: {
+    marginRight: theme.spacing(1),
   },
   addBlockButton: {
     marginTop: theme.spacing(1),
@@ -101,22 +107,44 @@ const useStyles = makeStyles((theme) => ({
     backgroundColor: theme.palette.background.default,
     borderRadius: theme.shape.borderRadius,
   },
+  sectionTitle: {
+    display: 'flex',
+    alignItems: 'center',
+    '& .MuiTypography-root': {
+      marginRight: theme.spacing(1),
+    },
+  },
+  sectionLevel: {
+    color: theme.palette.text.secondary,
+    marginRight: theme.spacing(1),
+  },
+  actionButtons: {
+    display: 'flex',
+    '& > *': {
+      marginLeft: theme.spacing(0.5),
+    },
+  },
   mobileWarning: {
     padding: theme.spacing(3),
-    margin: theme.spacing(2),
+    marginBottom: theme.spacing(3),
     backgroundColor: theme.palette.warning.light,
-    borderRadius: theme.shape.borderRadius,
-    textAlign: 'center',
+    color: theme.palette.warning.contrastText,
   },
+  fieldBlock: {
+    backgroundColor: theme.palette.background.default,
+  },
+  signatureBlock: {
+    backgroundColor: theme.palette.background.default,
+    border: `1px dashed ${theme.palette.primary.main}`
+  }
 }));
 
 function FormEditor() {
   const classes = useStyles();
-  const { formId } = useParams();
-  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
+  const { formId } = useParams();
+  const navigate = useNavigate();
   const isEditMode = Boolean(formId);
   
   // Form state
@@ -133,10 +161,9 @@ function FormEditor() {
   const [loading, setLoading] = useState(isEditMode);
   const [error, setError] = useState('');
   const [blockEditorOpen, setBlockEditorOpen] = useState(false);
-  const [blockEditorMode, setBlockEditorMode] = useState('section');
   const [currentBlock, setCurrentBlock] = useState(null);
-  const [currentBlockIndex, setCurrentBlockIndex] = useState(-1);
-  const [parentBlockIndex, setParentBlockIndex] = useState(-1);
+  const [currentBlockPath, setCurrentBlockPath] = useState(null);
+  const [blockEditorMode, setBlockEditorMode] = useState('section'); // 'section', 'subsection', 'subsubsection', 'field-or-signature'
   const [publishDialogOpen, setPublishDialogOpen] = useState(false);
   const [revisionType, setRevisionType] = useState('minor');
   
@@ -150,7 +177,14 @@ function FormEditor() {
         const formSnap = await getDoc(formRef);
         
         if (formSnap.exists()) {
-          setFormData(formSnap.data());
+          let formDataFromDB = formSnap.data();
+          
+          // Ensure all blocks have proper structure for new nested hierarchy
+          if (formDataFromDB.blocks) {
+            formDataFromDB.blocks = ensureBlockHierarchy(formDataFromDB.blocks);
+          }
+          
+          setFormData(formDataFromDB);
         } else {
           setError('Form not found');
           navigate('/admin/dashboard');
@@ -163,22 +197,48 @@ function FormEditor() {
       }
     }
     
-    if (isEditMode) {
-      loadFormData();
-    } else {
-      // If it's a new form, add a default group
+    // New form initialization
+    if (!isEditMode && formData.blocks.length === 0) {
+      // Start with a default section
       setFormData({
         ...formData,
         blocks: [{
-          id: `group-${Date.now()}`,
+          id: `section-${Date.now()}`,
           type: 'group',
           title: 'Section 1',
           description: '',
           children: []
         }]
       });
+      setLoading(false);
+    } else if (isEditMode) {
+      loadFormData();
+    } else {
+      setLoading(false);
     }
   }, [formId, isEditMode, navigate]);
+  
+  // Ensure all blocks have the proper structure for the nested hierarchy
+  const ensureBlockHierarchy = (blocks) => {
+    return blocks.map(block => {
+      // Make sure all blocks have an id
+      if (!block.id) {
+        block.id = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      }
+      
+      // Make sure all groups have a children array
+      if (block.type === 'group' && !block.children) {
+        block.children = [];
+      }
+      
+      // Recursively ensure children have proper structure
+      if (block.type === 'group' && block.children) {
+        block.children = ensureBlockHierarchy(block.children);
+      }
+      
+      return block;
+    });
+  };
   
   // Helper function to calculate next revision number
   const getNextRevision = (type) => {
@@ -201,80 +261,212 @@ function FormEditor() {
     });
   };
   
-  // Open section editor (add group)
+  // Open block editor for a new section
   const handleAddSection = () => {
-    setBlockEditorMode('section');
     setCurrentBlock({
       type: 'group',
       title: '',
+      description: '',
+      children: []
     });
-    setCurrentBlockIndex(-1);
-    setParentBlockIndex(-1);
+    setCurrentBlockPath(null);
+    setBlockEditorMode('section');
     setBlockEditorOpen(true);
   };
   
-  // Open block editor for adding a field or signature within a group
-  const handleAddBlockToGroup = (parentIndex) => {
-    setBlockEditorMode('field-or-signature');
+  // Open block editor for a new subsection
+  const handleAddSubsection = (parentIndex) => {
+    setCurrentBlock({
+      type: 'group',
+      title: '',
+      description: '',
+      children: []
+    });
+    setCurrentBlockPath([parentIndex]);
+    setBlockEditorMode('subsection');
+    setBlockEditorOpen(true);
+  };
+  
+  // Open block editor for a new sub-subsection
+  const handleAddSubSubsection = (parentIndex, childIndex) => {
+    setCurrentBlock({
+      type: 'group',
+      title: '',
+      description: '',
+      children: []
+    });
+    setCurrentBlockPath([parentIndex, childIndex]);
+    setBlockEditorMode('subsubsection');
+    setBlockEditorOpen(true);
+  };
+  
+  // Open block editor for a new field or signature block
+  const handleAddBlockToGroup = (path) => {
     setCurrentBlock({
       type: 'field',
       title: '',
+      fieldType: 'short_text'
     });
-    setCurrentBlockIndex(-1);
-    setParentBlockIndex(parentIndex);
+    setCurrentBlockPath(path);
+    setBlockEditorMode('field-or-signature');
     setBlockEditorOpen(true);
   };
   
+  // Helper function to find a block by path and update it
+  const updateBlockAtPath = (blocks, path, newBlock, isDelete = false) => {
+    // If no path, it's a top-level block
+    if (!path || path.length === 0) {
+      return isDelete 
+        ? blocks.filter(block => block.id !== newBlock.id)
+        : blocks.map(block => block.id === newBlock.id ? newBlock : block);
+    }
+    
+    // We need to navigate to the proper location in the hierarchy
+    const [currentIndex, ...restPath] = path;
+    
+    return blocks.map((block, index) => {
+      if (index !== currentIndex) return block;
+      
+      // If we're at the parent of the target
+      if (restPath.length === 0) {
+        const children = isDelete
+          ? block.children.filter(child => child.id !== newBlock.id)
+          : block.children.map(child => child.id === newBlock.id ? newBlock : child);
+        
+        return { ...block, children };
+      }
+      
+      // We need to go deeper
+      if (block.type === 'group' && block.children) {
+        return {
+          ...block,
+          children: updateBlockAtPath(block.children, restPath, newBlock, isDelete)
+        };
+      }
+      
+      return block;
+    });
+  };
+  
+  // Helper function to add a block at a specific path
+  const addBlockAtPath = (blocks, path, newBlock) => {
+    // If no path, it's a top-level block
+    if (!path || path.length === 0) {
+      return [...blocks, newBlock];
+    }
+    
+    // We need to navigate to the proper location in the hierarchy
+    const [currentIndex, ...restPath] = path;
+    
+    return blocks.map((block, index) => {
+      if (index !== currentIndex) return block;
+      
+      // If we're at the parent of the target
+      if (restPath.length === 0) {
+        return { 
+          ...block, 
+          children: [...(block.children || []), newBlock] 
+        };
+      }
+      
+      // We need to go deeper
+      if (block.type === 'group' && block.children) {
+        return {
+          ...block,
+          children: addBlockAtPath(block.children, restPath, newBlock)
+        };
+      }
+      
+      return block;
+    });
+  };
+  
+  // Helper function to move a block up or down within its parent
+  const moveBlock = (path, direction) => {
+    if (!path) return;
+    
+    const updatedFormData = { ...formData };
+    let blocks = [...updatedFormData.blocks];
+    
+    // If it's a top-level block
+    if (path.length === 1) {
+      const index = path[0];
+      const newIndex = direction === 'up' ? index - 1 : index + 1;
+      
+      // Check boundaries
+      if (newIndex < 0 || newIndex >= blocks.length) return;
+      
+      // Swap blocks
+      [blocks[index], blocks[newIndex]] = [blocks[newIndex], blocks[index]];
+      
+      updatedFormData.blocks = blocks;
+      setFormData(updatedFormData);
+      return;
+    }
+    
+    // For nested blocks, we need to navigate to the parent
+    let parentBlocks = blocks;
+    let currentPath = [];
+    let targetArray, targetIndex;
+    
+    for (let i = 0; i < path.length - 1; i++) {
+      currentPath.push(path[i]);
+      if (i === path.length - 2) {
+        targetArray = parentBlocks[path[i]].children;
+        targetIndex = path[path.length - 1];
+      } else {
+        parentBlocks = parentBlocks[path[i]].children;
+      }
+    }
+    
+    // Now swap the block with its neighbor
+    const newIndex = direction === 'up' ? targetIndex - 1 : targetIndex + 1;
+    
+    // Check boundaries
+    if (newIndex < 0 || newIndex >= targetArray.length) return;
+    
+    // Swap blocks
+    [targetArray[targetIndex], targetArray[newIndex]] = [targetArray[newIndex], targetArray[targetIndex]];
+    
+    setFormData(updatedFormData);
+  };
+  
   // Edit existing block
-  const handleEditBlock = (block, blockIndex, parentIndex = -1) => {
-    setBlockEditorMode(block.type === 'group' ? 'section' : 'field');
+  const handleEditBlock = (block, path) => {
     setCurrentBlock({...block});
-    setCurrentBlockIndex(blockIndex);
-    setParentBlockIndex(parentIndex);
+    setCurrentBlockPath(path);
+    
+    // Determine the mode based on the block type and path depth
+    if (block.type === 'group') {
+      if (!path || path.length === 0) {
+        setBlockEditorMode('section');
+      } else if (path.length === 1) {
+        setBlockEditorMode('subsection');
+      } else {
+        setBlockEditorMode('subsubsection');
+      }
+    } else {
+      setBlockEditorMode('field-or-signature');
+    }
+    
     setBlockEditorOpen(true);
   };
   
   // Save block from editor
   const handleSaveBlock = (blockData) => {
+    // Add a unique ID if it's a new block
+    if (!blockData.id) {
+      blockData.id = `block-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    
     let updatedBlocks = [...formData.blocks];
     
-    if (parentBlockIndex === -1) {
-      // We're dealing with a top-level block (section/group)
-      if (currentBlockIndex === -1) {
-        // Add new section
-        updatedBlocks.push({
-          ...blockData,
-          id: `group-${Date.now()}`,
-          children: []
-        });
-      } else {
-        // Update existing section
-        updatedBlocks[currentBlockIndex] = {
-          ...updatedBlocks[currentBlockIndex],
-          ...blockData
-        };
-      }
+    // If it's a block being edited (not a new one)
+    if (currentBlock.id) {
+      updatedBlocks = updateBlockAtPath(updatedBlocks, currentBlockPath, blockData);
     } else {
-      // We're dealing with a child block (field/signature)
-      const parentBlock = {...updatedBlocks[parentBlockIndex]};
-      const children = [...(parentBlock.children || [])];
-      
-      if (currentBlockIndex === -1) {
-        // Add new field to section
-        children.push({
-          ...blockData,
-          id: `block-${Date.now()}`
-        });
-      } else {
-        // Update existing field
-        children[currentBlockIndex] = {
-          ...children[currentBlockIndex],
-          ...blockData
-        };
-      }
-      
-      parentBlock.children = children;
-      updatedBlocks[parentBlockIndex] = parentBlock;
+      // It's a new block, add it to the appropriate location
+      updatedBlocks = addBlockAtPath(updatedBlocks, currentBlockPath, blockData);
     }
     
     setFormData({
@@ -284,29 +476,25 @@ function FormEditor() {
     
     setBlockEditorOpen(false);
     setCurrentBlock(null);
-    setCurrentBlockIndex(-1);
-    setParentBlockIndex(-1);
+    setCurrentBlockPath(null);
   };
   
   // Delete block
-  const handleDeleteBlock = (blockIndex, parentIndex = -1) => {
+  const handleDeleteBlock = (block, path) => {
+    // Don't allow deleting when it would leave the form with no sections
+    if (formData.blocks.length <= 1 && (!path || path.length === 0)) {
+      alert("Forms must have at least one section. You cannot delete the last remaining section.");
+      return;
+    }
+    
     let updatedBlocks = [...formData.blocks];
     
-    if (parentIndex === -1) {
-      // Don't allow deleting the last section
-      if (updatedBlocks.length <= 1) {
-        setError('Forms must have at least one section');
-        return;
-      }
-      
-      // Delete section
-      updatedBlocks = updatedBlocks.filter((_, i) => i !== blockIndex);
+    if (!path || path.length === 0) {
+      // It's a top-level block
+      updatedBlocks = updatedBlocks.filter(b => b.id !== block.id);
     } else {
-      // Delete field from section
-      const parentBlock = {...updatedBlocks[parentIndex]};
-      const children = parentBlock.children.filter((_, i) => i !== blockIndex);
-      parentBlock.children = children;
-      updatedBlocks[parentIndex] = parentBlock;
+      // It's a nested block
+      updatedBlocks = updateBlockAtPath(updatedBlocks, path, block, true);
     }
     
     setFormData({
@@ -316,63 +504,13 @@ function FormEditor() {
   };
   
   // Move block up
-  const handleMoveBlockUp = (blockIndex, parentIndex = -1) => {
-    if (blockIndex === 0) return; // Already at the top
-    
-    let updatedBlocks = [...formData.blocks];
-    
-    if (parentIndex === -1) {
-      // Swap sections
-      [updatedBlocks[blockIndex - 1], updatedBlocks[blockIndex]] = 
-      [updatedBlocks[blockIndex], updatedBlocks[blockIndex - 1]];
-    } else {
-      // Swap fields within a section
-      const parentBlock = {...updatedBlocks[parentIndex]};
-      const children = [...parentBlock.children];
-      
-      [children[blockIndex - 1], children[blockIndex]] = 
-      [children[blockIndex], children[blockIndex - 1]];
-      
-      parentBlock.children = children;
-      updatedBlocks[parentIndex] = parentBlock;
-    }
-    
-    setFormData({
-      ...formData,
-      blocks: updatedBlocks
-    });
+  const handleMoveUp = (path) => {
+    moveBlock(path, 'up');
   };
   
   // Move block down
-  const handleMoveBlockDown = (blockIndex, parentIndex = -1) => {
-    let updatedBlocks = [...formData.blocks];
-    
-    if (parentIndex === -1) {
-      // Can't move past the end
-      if (blockIndex >= updatedBlocks.length - 1) return;
-      
-      // Swap sections
-      [updatedBlocks[blockIndex], updatedBlocks[blockIndex + 1]] = 
-      [updatedBlocks[blockIndex + 1], updatedBlocks[blockIndex]];
-    } else {
-      // Swap fields within a section
-      const parentBlock = {...updatedBlocks[parentIndex]};
-      const children = [...parentBlock.children];
-      
-      // Can't move past the end
-      if (blockIndex >= children.length - 1) return;
-      
-      [children[blockIndex], children[blockIndex + 1]] = 
-      [children[blockIndex + 1], children[blockIndex]];
-      
-      parentBlock.children = children;
-      updatedBlocks[parentIndex] = parentBlock;
-    }
-    
-    setFormData({
-      ...formData,
-      blocks: updatedBlocks
-    });
+  const handleMoveDown = (path) => {
+    moveBlock(path, 'down');
   };
   
   // Save form as draft
@@ -468,17 +606,221 @@ function FormEditor() {
   const handleCancelPublish = () => {
     setPublishDialogOpen(false);
   };
+  
+  // Cancel editing and return to dashboard
+  const handleCancel = () => {
+    navigate('/admin/dashboard');
+  };
+  
+  // Generate section number based on path and index
+  const generateSectionNumber = (path, index) => {
+    if (!path || path.length === 0) {
+      return `${index + 1}.`;
+    } else if (path.length === 1) {
+      return `${path[0] + 1}.${index + 1}.`;
+    } else if (path.length === 2) {
+      return `${path[0] + 1}.${path[1] + 1}.${index + 1}.`;
+    }
+    return '';
+  };
+  
+  // Get the class for the block item based on its type and level
+  const getBlockClass = (block, level) => {
+    let baseClass = classes.blockItem;
+    
+    if (block.type === 'field') {
+      baseClass = `${baseClass} ${classes.fieldBlock}`;
+    } else if (block.type === 'signature') {
+      baseClass = `${baseClass} ${classes.signatureBlock}`;
+    }
+    
+    return baseClass;
+  };
+  
+  // Render block based on its type and depth
+  const renderBlock = (block, path = [], level = 0, sectionNumber = '') => {
+    const isGroup = block.type === 'group';
+    const blockClass = getBlockClass(block, level);
+    const containerClass = level === 1 
+      ? classes.nestedSection 
+      : level === 2 
+        ? classes.nestedNestedSection 
+        : '';
+    
+    return (
+      <div key={block.id} className={`${classes.blockItemContainer} ${containerClass}`}>
+        <ListItem 
+          className={blockClass}
+          button
+          onClick={() => handleEditBlock(block, path)}
+        >
+          <div className={classes.sectionTitle}>
+            <Typography className={classes.sectionLevel} variant="body2">
+              {sectionNumber}
+            </Typography>
+            <ListItemText
+              primary={block.title || 'Untitled Block'}
+              secondary={
+                block.type === 'group' 
+                  ? 'Section' 
+                  : block.type === 'field' 
+                    ? `Field (${block.fieldType})` 
+                    : 'Signature'
+              }
+            />
+          </div>
+          
+          <ListItemSecondaryAction className={classes.actionButtons}>
+            {/* Show up/down arrows for reordering */}
+            <Tooltip title="Move Up" arrow>
+              <span>
+                <IconButton 
+                  edge="end" 
+                  className={classes.actionButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMoveUp(path);
+                  }}
+                  disabled={path.length > 0 ? path[path.length - 1] === 0 : path[0] === 0}
+                >
+                  <ArrowUpIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            
+            <Tooltip title="Move Down" arrow>
+              <span>
+                <IconButton 
+                  edge="end" 
+                  className={classes.actionButton}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleMoveDown(path);
+                  }}
+                  disabled={
+                    path.length === 0 
+                      ? path[0] === formData.blocks.length - 1 
+                      : path.length === 1 
+                        ? path[0] >= formData.blocks.length || 
+                          !formData.blocks[path[0]].children || 
+                          path[1] === formData.blocks[path[0]].children.length - 1
+                        : path.length === 2
+                          ? path[0] >= formData.blocks.length ||
+                            path[1] >= formData.blocks[path[0]].children.length ||
+                            !formData.blocks[path[0]].children[path[1]].children ||
+                            path[2] === formData.blocks[path[0]].children[path[1]].children.length - 1
+                          : false
+                  }
+                >
+                  <ArrowDownIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+            
+            {/* Group-specific actions for adding sub-items */}
+            {isGroup && (
+              <>
+                {level === 0 && (
+                  <Tooltip title="Add Subsection" arrow>
+                    <IconButton 
+                      edge="end" 
+                      className={classes.actionButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddSubsection(path[0]);
+                      }}
+                    >
+                      <CreateNewFolderIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                
+                {level === 1 && (
+                  <Tooltip title="Add Sub-subsection" arrow>
+                    <IconButton 
+                      edge="end" 
+                      className={classes.actionButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddSubSubsection(path[0], path[1]);
+                      }}
+                    >
+                      <CreateNewFolderIcon />
+                    </IconButton>
+                  </Tooltip>
+                )}
+                
+                <Tooltip title="Add Field or Signature" arrow>
+                  <IconButton 
+                    edge="end" 
+                    className={classes.actionButton}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAddBlockToGroup(path);
+                    }}
+                  >
+                    <AddIcon />
+                  </IconButton>
+                </Tooltip>
+              </>
+            )}
+            
+            {/* Edit and delete buttons */}
+            <Tooltip title="Edit" arrow>
+              <IconButton 
+                edge="end" 
+                className={classes.actionButton}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleEditBlock(block, path);
+                }}
+              >
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title="Delete" arrow>
+              <span>
+                <IconButton 
+                  edge="end"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteBlock(block, path);
+                  }}
+                  disabled={formData.blocks.length <= 1 && (!path || path.length === 0)}
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </span>
+            </Tooltip>
+          </ListItemSecondaryAction>
+        </ListItem>
+        
+        {/* Recursively render children if this is a group */}
+        {isGroup && block.children && block.children.length > 0 && (
+          <div style={{ width: '100%' }}>
+            {block.children.map((childBlock, childIndex) => {
+              const childPath = [...path, childIndex];
+              const childSectionNumber = generateSectionNumber(path, childIndex);
+              return renderBlock(childBlock, childPath, level + 1, childSectionNumber);
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
 
-  // Mobile warning for admin functions
+  // If on mobile, show warning
   if (isMobile) {
     return (
-      <Container className={classes.content}>
+      <Container>
         <Paper className={classes.mobileWarning}>
-          <Typography variant="h6" gutterBottom>
-            Desktop Required
+          <Typography variant="h5" gutterBottom>
+            Desktop Recommended
           </Typography>
           <Typography variant="body1">
             Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+            The admin interface is optimized for larger screens.
           </Typography>
         </Paper>
       </Container>
@@ -487,7 +829,7 @@ function FormEditor() {
   
   if (loading) {
     return (
-      <Container className={classes.content}>
+      <Container>
         <Typography variant="h6">Loading...</Typography>
       </Container>
     );
@@ -495,46 +837,41 @@ function FormEditor() {
   
   return (
     <div className={classes.root}>
-      <Container className={classes.content}>
-        {/* Form Header */}
-        <div className={classes.header}>
-          <Typography variant="h4" className={classes.title}>
-            {isEditMode ? 'Edit Form' : 'Create New Form'}
-          </Typography>
+      <Container>
+        <Typography variant="h4" className={classes.title}>
+          {isEditMode ? 'Edit Form' : 'Create New Form'}
+        </Typography>
+        
+        <div className={classes.buttonsContainer}>
+          <Button 
+            variant="outlined"
+            color="default"
+            onClick={handleCancel}
+            className={classes.actionButton}
+          >
+            Cancel
+          </Button>
           
-          <div className={classes.actionButtons}>
-            <Button 
-              variant="outlined"
-              color="default"
-              size="large"
-              startIcon={<CancelIcon />}
-              onClick={() => navigate('/admin/dashboard')}
-            >
-              Cancel
-            </Button>
-            
-            <Button 
-              variant="outlined"
-              color="primary"
-              size="large"
-              startIcon={<SaveIcon />}
-              onClick={handleSaveDraft}
-            >
-              Save Draft
-            </Button>
-            
-            <Button 
-              variant="contained"
-              color="primary"
-              size="large"
-              startIcon={<PublishIcon />}
-              onClick={handlePublishClick}
-            >
-              Publish
-            </Button>
-          </div>
+          <Button 
+            variant="contained"
+            color="primary"
+            startIcon={<SaveIcon />}
+            onClick={handleSaveDraft}
+            className={classes.actionButton}
+          >
+            Save Draft
+          </Button>
+          
+          <Button 
+            variant="contained"
+            color="secondary"
+            startIcon={<PublishIcon />}
+            onClick={handlePublishClick}
+          >
+            Publish
+          </Button>
         </div>
-
+        
         {error && (
           <Typography color="error" component="div" className={classes.formSection}>
             {error}
@@ -609,7 +946,7 @@ function FormEditor() {
           )}
         </Paper>
         
-        {/* Sections Section */}
+        {/* Blocks Section */}
         <Paper className={classes.paper}>
           <div className={classes.formSection}>
             <Typography variant="h5" gutterBottom>
@@ -617,163 +954,33 @@ function FormEditor() {
             </Typography>
             
             <Typography variant="subtitle2" gutterBottom>
-              Add sections to organize your form, then add fields within each section.
+              Add sections and fields to create the structure of your form. Sections can contain subsections and fields.
             </Typography>
           </div>
           
           <List className={classes.blockList}>
-            {formData.blocks.map((block, blockIndex) => (
-              <React.Fragment key={block.id || blockIndex}>
-                {/* Section (Group) */}
-                <ListItem 
-                  className={classes.blockItem}
-                  button
-                  onClick={() => handleEditBlock(block, blockIndex)}
-                >
-                  <ListItemText
-                    primary={
-                      <Typography variant="subtitle1">
-                        <b>Section {blockIndex + 1}:</b> {block.title || 'Untitled Section'}
-                      </Typography>
-                    }
-                    secondary={block.description || ''}
-                  />
-                  
-                  <ListItemSecondaryAction className={classes.blockActions}>
-                    <IconButton 
-                      edge="end" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleMoveBlockUp(blockIndex);
-                      }}
-                      disabled={blockIndex === 0}
-                    >
-                      <ArrowUpIcon />
-                    </IconButton>
-                    
-                    <IconButton 
-                      edge="end" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleMoveBlockDown(blockIndex);
-                      }}
-                      disabled={blockIndex === formData.blocks.length - 1}
-                    >
-                      <ArrowDownIcon />
-                    </IconButton>
-                    
-                    <IconButton 
-                      edge="end" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleEditBlock(block, blockIndex);
-                      }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    
-                    <IconButton 
-                      edge="end" 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteBlock(blockIndex);
-                      }}
-                      disabled={formData.blocks.length <= 1}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-                
-                {/* Fields within Section */}
-                {block.children && block.children.map((childBlock, childIndex) => (
-                  <ListItem 
-                    key={childBlock.id || `${blockIndex}-${childIndex}`}
-                    className={`${classes.blockItem} ${classes.nestedBlock}`}
-                    button
-                    onClick={() => handleEditBlock(childBlock, childIndex, blockIndex)}
-                  >
-                    <ListItemText
-                      primary={
-                        <Typography variant="body1">
-                          {childBlock.title || 'Untitled Field'} ({childBlock.type})
-                        </Typography>
-                      }
-                      secondary={childBlock.description || ''}
-                    />
-                    
-                    <ListItemSecondaryAction>
-                      <IconButton 
-                        edge="end" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveBlockUp(childIndex, blockIndex);
-                        }}
-                        disabled={childIndex === 0}
-                      >
-                        <ArrowUpIcon />
-                      </IconButton>
-                      
-                      <IconButton 
-                        edge="end" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleMoveBlockDown(childIndex, blockIndex);
-                        }}
-                        disabled={childIndex === (block.children?.length || 0) - 1}
-                      >
-                        <ArrowDownIcon />
-                      </IconButton>
-                      
-                      <IconButton 
-                        edge="end" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditBlock(childBlock, childIndex, blockIndex);
-                        }}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      
-                      <IconButton 
-                        edge="end" 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteBlock(childIndex, blockIndex);
-                        }}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                ))}
-                
-                {/* Add Field/Signature Button */}
-                <Box ml={4} mb={2}>
-                  <Button
-                    variant="outlined"
-                    color="primary"
-                    size="small"
-                    startIcon={<AddIcon />}
-                    className={classes.addBlockButton}
-                    onClick={() => handleAddBlockToGroup(blockIndex)}
-                  >
-                    Add Field or Signature
-                  </Button>
-                </Box>
-              </React.Fragment>
-            ))}
+            {formData.blocks.length === 0 ? (
+              <Typography align="center" color="textSecondary">
+                No sections added yet. Click the "Add Section" button to start building your form.
+              </Typography>
+            ) : (
+              formData.blocks.map((block, index) => {
+                return renderBlock(block, [index], 0, `${index + 1}.`);
+              })
+            )}
           </List>
           
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            className={classes.addBlockButton}
-            onClick={handleAddSection}
-          >
-            Add Section
-          </Button>
+          <Tooltip title="Add a new top-level section to your form" arrow>
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              className={classes.addBlockButton}
+              onClick={handleAddSection}
+            >
+              Add Section
+            </Button>
+          </Tooltip>
         </Paper>
       </Container>
       
@@ -781,9 +988,9 @@ function FormEditor() {
       <BlockEditor
         open={blockEditorOpen}
         block={currentBlock}
-        mode={blockEditorMode}
         onSave={handleSaveBlock}
         onClose={() => setBlockEditorOpen(false)}
+        mode={blockEditorMode}
       />
       
       {/* Publish Confirmation Dialog */}

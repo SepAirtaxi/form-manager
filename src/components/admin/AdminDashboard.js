@@ -1,9 +1,12 @@
 // src/components/admin/AdminDashboard.js
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { collection, getDocs, doc, deleteDoc, query, orderBy, where } from 'firebase/firestore';
+import { Link, useNavigate } from 'react-router-dom';
+import { collection, getDocs, doc, deleteDoc, query, orderBy, where, getDoc } from 'firebase/firestore';
 import { db } from '../../firebase';
 import { useAuth } from '../../contexts/AuthContext';
+import PdfTestButton from './PdfTestButton';
+import PdfViewer from './PdfViewer';
+import { generatePdf } from '../../services/pdfService';
 
 // Material UI imports
 import {
@@ -18,40 +21,42 @@ import {
   TableHead,
   TableRow,
   IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
   Grid,
   Card,
   CardContent,
   CardActions,
   Chip,
-  Divider,
-  Hidden,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   useMediaQuery,
   makeStyles,
-  useTheme
+  useTheme,
+  Tooltip,
+  CircularProgress
 } from '@material-ui/core';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   FileCopy as DuplicateIcon,
+  Person as UserIcon,
+  Settings as SettingsIcon,
   Create as CreateIcon,
   PanTool as SignatureIcon,
-  Settings as SettingsIcon,
-  Person as UserIcon
+  Visibility as ViewIcon,
+  GetApp as DownloadIcon
 } from '@material-ui/icons';
 
 const useStyles = makeStyles((theme) => ({
+  title: {
+    marginBottom: theme.spacing(3),
+  },
   content: {
     flexGrow: 1,
     padding: theme.spacing(3),
-  },
-  pageTitle: {
-    marginBottom: theme.spacing(4),
   },
   button: {
     margin: theme.spacing(1),
@@ -80,17 +85,23 @@ const useStyles = makeStyles((theme) => ({
   },
   mobileWarning: {
     padding: theme.spacing(3),
-    margin: theme.spacing(2),
+    marginBottom: theme.spacing(3),
     backgroundColor: theme.palette.warning.light,
+    color: theme.palette.warning.contrastText,
+  },
+  testPdfSection: {
+    marginTop: theme.spacing(4),
+    marginBottom: theme.spacing(4),
+    padding: theme.spacing(2),
+    backgroundColor: theme.palette.background.default,
     borderRadius: theme.shape.borderRadius,
-    textAlign: 'center',
+    border: `1px dashed ${theme.palette.primary.main}`,
   },
   submissionsSection: {
     marginTop: theme.spacing(4),
-    marginBottom: theme.spacing(4),
   },
-  submissionItem: {
-    padding: theme.spacing(2),
+  actionButton: {
+    marginRight: theme.spacing(1),
   }
 }));
 
@@ -98,24 +109,26 @@ function AdminDashboard() {
   const classes = useStyles();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  
   const [forms, setForms] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [formToDelete, setFormToDelete] = useState(null);
-  const { currentUser, hasRole } = useAuth();
+  const [pdfViewerOpen, setPdfViewerOpen] = useState(false);
+  const [selectedSubmission, setSelectedSubmission] = useState(null);
+  const [downloadLoading, setDownloadLoading] = useState({});
+  const { currentUser, userRole, hasRole } = useAuth();
+  const navigate = useNavigate();
 
-  // Load forms and recent submissions on component mount
+  // Load forms on component mount
   useEffect(() => {
-    async function loadData() {
+    async function loadForms() {
       try {
-        // Load forms
         const formsQuery = query(collection(db, 'forms'), orderBy('updatedAt', 'desc'));
-        const formsSnapshot = await getDocs(formsQuery);
+        const querySnapshot = await getDocs(formsQuery);
         
-        const formsData = formsSnapshot.docs.map(doc => ({
+        const formsData = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
@@ -123,31 +136,36 @@ function AdminDashboard() {
         setForms(formsData);
         
         // Load recent submissions
-        const submissionsQuery = query(
-          collection(db, 'submissions'),
-          where('status', '==', 'submitted'),
-          orderBy('submittedAt', 'desc')
-        );
-        
-        const submissionsSnapshot = await getDocs(submissionsQuery);
-        
-        const submissionsData = submissionsSnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })).slice(0, 10); // Get only the 10 most recent
-        
-        setSubmissions(submissionsData);
-        
+        if (currentUser) {
+          const submissionsQuery = query(
+            collection(db, 'submissions'),
+            where('status', '==', 'submitted'),
+            orderBy('submittedAt', 'desc')
+          );
+          
+          try {
+            const submissionsSnap = await getDocs(submissionsQuery);
+            
+            const submissionsData = submissionsSnap.docs.map(doc => ({
+              id: doc.id,
+              ...doc.data()
+            })).slice(0, 10); // Get only the 10 most recent
+            
+            setSubmissions(submissionsData);
+          } catch (subError) {
+            console.error("Error loading submissions:", subError);
+          }
+        }
       } catch (err) {
-        setError('Error loading data: ' + err.message);
+        setError('Error loading forms: ' + err.message);
         console.error(err);
       } finally {
         setLoading(false);
       }
     }
     
-    loadData();
-  }, []);
+    loadForms();
+  }, [currentUser]);
 
   // Handle form deletion
   const handleDeleteClick = (form) => {
@@ -180,16 +198,81 @@ function AdminDashboard() {
     console.log('Duplicate form', form.id);
   };
 
-  // Mobile warning for admin functions
+  // Handle PDF viewing
+  const handleViewPdf = (submission) => {
+    setSelectedSubmission(submission.id);
+    setPdfViewerOpen(true);
+  };
+
+  // Handle PDF download
+  const handleDownloadPdf = async (submission) => {
+    setDownloadLoading({ ...downloadLoading, [submission.id]: true });
+    
+    try {
+      // Fetch the form template
+      const formRef = doc(db, 'forms', submission.formId);
+      const formSnap = await getDoc(formRef);
+      
+      if (!formSnap.exists()) {
+        throw new Error('Form template not found');
+      }
+      
+      const form = formSnap.data();
+      
+      // Fetch signatures
+      const signaturesQuery = query(collection(db, 'signatures'));
+      const signaturesSnap = await getDocs(signaturesQuery);
+      
+      const signatures = signaturesSnap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Fetch company settings
+      let companySettings = null;
+      const settingsRef = doc(db, 'settings', 'company');
+      const settingsSnap = await getDoc(settingsRef);
+      
+      if (settingsSnap.exists()) {
+        companySettings = settingsSnap.data();
+      }
+      
+      // Generate the PDF
+      const pdfBlob = await generatePdf(form, submission.data, signatures, companySettings);
+      
+      // Download the PDF
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      const filename = `${submission.formTitle.replace(/\s+/g, '_')}_${new Date(submission.submittedAt.toDate()).toISOString().split('T')[0]}.pdf`;
+      
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      
+    } catch (err) {
+      console.error('Error downloading PDF:', err);
+      setError(`Error downloading PDF: ${err.message}`);
+    } finally {
+      setDownloadLoading({ ...downloadLoading, [submission.id]: false });
+    }
+  };
+
+  // If on mobile, show warning
   if (isMobile) {
     return (
       <Container className={classes.content}>
         <Paper className={classes.mobileWarning}>
-          <Typography variant="h6" gutterBottom>
-            Desktop Required
+          <Typography variant="h5" gutterBottom>
+            Desktop Recommended
           </Typography>
           <Typography variant="body1">
             Please open Form Manager on a desktop or laptop device to utilize the admin functions.
+            The admin interface is optimized for larger screens.
           </Typography>
         </Paper>
       </Container>
@@ -198,15 +281,33 @@ function AdminDashboard() {
 
   return (
     <Container className={classes.content}>
-      <Typography variant="h4" className={classes.pageTitle}>
+      <Typography variant="h4" className={classes.title}>
         Admin Dashboard
       </Typography>
-
+      
       {error && (
         <Typography color="error">
           {error}
         </Typography>
       )}
+      
+      {/* PDF Testing Section */}
+      <Paper className={classes.testPdfSection}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} sm={8}>
+            <Typography variant="h6" gutterBottom>
+              Test PDF Generation
+            </Typography>
+            <Typography variant="body2" color="textSecondary">
+              Generate a sample PDF with test data to check formatting and layout.
+              This feature is for testing purposes only.
+            </Typography>
+          </Grid>
+          <Grid item xs={12} sm={4} style={{ textAlign: 'right' }}>
+            <PdfTestButton />
+          </Grid>
+        </Grid>
+      </Paper>
 
       {/* Admin Tools Section */}
       <Typography variant="h5" gutterBottom style={{ marginTop: '24px' }}>
@@ -322,47 +423,6 @@ function AdminDashboard() {
         )}
       </Grid>
 
-      {/* Recent Submissions Section */}
-      {submissions.length > 0 && (
-        <div className={classes.submissionsSection}>
-          <Typography variant="h5" gutterBottom>
-            Recent Submissions
-          </Typography>
-          
-          <Paper>
-            {submissions.map((submission, index) => (
-              <div key={submission.id}>
-                <Grid container spacing={2} className={classes.submissionItem}>
-                  <Grid item xs={8}>
-                    <Typography variant="subtitle1">
-                      {submission.formTitle}
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Submitted by: {submission.userName || 'Unknown user'}
-                      <br />
-                      Date: {submission.submittedAt ? new Date(submission.submittedAt.toDate()).toLocaleString() : 'Unknown'}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={4} style={{ textAlign: 'right' }}>
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      color="primary"
-                      component={Link}
-                      to={`/submission/${submission.id}`}
-                    >
-                      View Details
-                    </Button>
-                  </Grid>
-                </Grid>
-                {index < submissions.length - 1 && <Divider />}
-              </div>
-            ))}
-          </Paper>
-        </div>
-      )}
-
-      {/* Form Management Section */}
       <Typography variant="h5" gutterBottom>
         Form Management
       </Typography>
@@ -436,6 +496,66 @@ function AdminDashboard() {
           </TableBody>
         </Table>
       </TableContainer>
+      
+      {/* Recent Submissions Section */}
+      {submissions.length > 0 && (
+        <div className={classes.submissionsSection}>
+          <Typography variant="h5" gutterBottom>
+            Recent Form Submissions
+          </Typography>
+          
+          <TableContainer component={Paper}>
+            <Table aria-label="submissions table">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Form</TableCell>
+                  <TableCell>Submitted By</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell align="right">Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {submissions.map((submission) => (
+                  <TableRow key={submission.id}>
+                    <TableCell>{submission.formTitle}</TableCell>
+                    <TableCell>{submission.userName || 'Anonymous'}</TableCell>
+                    <TableCell>
+                      {submission.submittedAt 
+                        ? new Date(submission.submittedAt.toDate()).toLocaleString() 
+                        : 'Unknown'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="View PDF">
+                        <IconButton
+                          className={classes.actionButton}
+                          color="primary"
+                          onClick={() => handleViewPdf(submission)}
+                        >
+                          <ViewIcon />
+                        </IconButton>
+                      </Tooltip>
+                      
+                      <Tooltip title="Download PDF">
+                        <IconButton
+                          className={classes.actionButton}
+                          color="primary"
+                          onClick={() => handleDownloadPdf(submission)}
+                          disabled={downloadLoading[submission.id]}
+                        >
+                          {downloadLoading[submission.id] ? 
+                            <CircularProgress size={24} /> : 
+                            <DownloadIcon />
+                          }
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <Dialog
@@ -453,7 +573,7 @@ function AdminDashboard() {
           </DialogContentText>
         </DialogContent>
         <DialogActions>
-          <Button onClick={cancelDelete} color="primary">
+          <Button onClick={cancelDelete} color="default">
             Cancel
           </Button>
           <Button onClick={confirmDelete} color="secondary" autoFocus>
@@ -461,6 +581,13 @@ function AdminDashboard() {
           </Button>
         </DialogActions>
       </Dialog>
+      
+      {/* PDF Viewer Dialog */}
+      <PdfViewer 
+        open={pdfViewerOpen}
+        onClose={() => setPdfViewerOpen(false)}
+        submissionId={selectedSubmission}
+      />
     </Container>
   );
 }

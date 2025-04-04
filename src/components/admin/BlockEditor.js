@@ -23,6 +23,7 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
+  Tooltip,
   makeStyles
 } from '@material-ui/core';
 import {
@@ -47,6 +48,17 @@ const useStyles = makeStyles((theme) => ({
   },
   divider: {
     margin: theme.spacing(2, 0),
+  },
+  modeLabel: {
+    color: theme.palette.text.secondary,
+    fontStyle: 'italic',
+    marginBottom: theme.spacing(2),
+  },
+  helpText: {
+    marginTop: theme.spacing(1),
+    marginBottom: theme.spacing(2),
+    color: theme.palette.text.secondary,
+    fontSize: '0.875rem',
   }
 }));
 
@@ -62,15 +74,15 @@ const fieldTypes = [
   { value: 'dropdown', label: 'Dropdown menu' }
 ];
 
-function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
+function BlockEditor({ open, block, onSave, onClose, mode }) {
   const classes = useStyles();
   const [formData, setFormData] = useState({
-    type: 'field', // Default type
+    type: 'field',
     title: '',
     description: '',
     fieldType: 'short_text',
     required: false,
-    options: [], // For multiple choice/dropdown
+    options: [],
     validation: {
       minLength: '',
       maxLength: '',
@@ -79,63 +91,72 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
       maxValue: '',
       units: ''
     },
-    newOption: '' // Temporary state for adding options
+    newOption: '',
+    children: []
   });
   
-  // Update form when block or mode changes
+  // Determine dialog title and mode label based on mode
+  const getDialogTitle = () => {
+    switch (mode) {
+      case 'section':
+        return 'Top-Level Section';
+      case 'subsection':
+        return 'Subsection (Level 2)';
+      case 'subsubsection':
+        return 'Sub-subsection (Level 3)';
+      case 'field-or-signature':
+        return formData.type === 'signature' ? 'Signature Field' : 'Form Field';
+      default:
+        return 'Block';
+    }
+  };
+  
+  const getModeLabel = () => {
+    switch (mode) {
+      case 'section':
+        return 'Creating a top-level section that will appear as "1." in your form';
+      case 'subsection':
+        return 'Creating a subsection that will appear as "1.1." in your form';
+      case 'subsubsection':
+        return 'Creating a sub-subsection that will appear as "1.1.1." in your form';
+      case 'field-or-signature':
+        return 'Adding a field or signature to collect data from users';
+      default:
+        return '';
+    }
+  };
+  
+  // Update form when block changes
   useEffect(() => {
     if (block) {
-      if (mode === 'section') {
-        // Force group type for sections
-        setFormData({
-          ...block,
-          type: 'group',
-          newOption: ''
-        });
-      } else if (mode === 'field') {
-        // Force field type for fields within sections
-        setFormData({
-          ...block,
-          type: 'field',
-          fieldType: block.fieldType || 'short_text',
-          required: block.required || false,
-          options: block.options || [],
-          validation: block.validation || {
-            minLength: '',
-            maxLength: '',
-            pattern: '',
-            minValue: '',
-            maxValue: '',
-            units: ''
-          },
-          newOption: ''
-        });
-      } else if (mode === 'signature') {
-        // Force signature type for signatures
-        setFormData({
-          ...block,
-          type: 'signature',
-          newOption: ''
-        });
-      } else if (mode === 'field-or-signature') {
-        // Allow field or signature types
-        setFormData({
-          ...block,
-          type: block.type || 'field',
-          fieldType: block.fieldType || 'short_text',
-          required: block.required || false,
-          options: block.options || [],
-          validation: block.validation || {
-            minLength: '',
-            maxLength: '',
-            pattern: '',
-            minValue: '',
-            maxValue: '',
-            units: ''
-          },
-          newOption: ''
-        });
+      // Set defaults based on the mode
+      let blockType = block.type || 'field';
+      
+      // Force type to 'group' for section modes
+      if (['section', 'subsection', 'subsubsection'].includes(mode)) {
+        blockType = 'group';
       }
+      
+      setFormData({
+        ...formData,
+        id: block.id || null,
+        type: blockType,
+        title: block.title || '',
+        description: block.description || '',
+        fieldType: block.fieldType || 'short_text',
+        required: block.required || false,
+        options: block.options || [],
+        validation: block.validation || {
+          minLength: '',
+          maxLength: '',
+          pattern: '',
+          minValue: '',
+          maxValue: '',
+          units: ''
+        },
+        children: block.children || [],
+        newOption: ''
+      });
     }
   }, [block, mode]);
   
@@ -188,13 +209,16 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
   const handleSave = () => {
     // Create a clean block object to save
     const blockToSave = {
+      id: formData.id, // Preserve ID if it exists
       type: formData.type,
       title: formData.title,
       description: formData.description
     };
     
     // Add type-specific properties
-    if (formData.type === 'field') {
+    if (formData.type === 'group') {
+      blockToSave.children = formData.children || [];
+    } else if (formData.type === 'field') {
       blockToSave.fieldType = formData.fieldType;
       blockToSave.required = formData.required;
       
@@ -237,20 +261,12 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
     
     onSave(blockToSave);
   };
-
-  // Determine if we should show block type options
-  const showBlockTypeOptions = mode === 'field-or-signature';
   
-  // Title text based on mode and block type
-  const getDialogTitle = () => {
-    if (mode === 'section') return 'Add/Edit Section';
-    if (mode === 'field') return 'Add/Edit Field';
-    if (mode === 'signature') return 'Add/Edit Signature Field';
-    
-    // For field-or-signature mode
-    return formData.type === 'group' ? 'Section' : 
-           formData.type === 'signature' ? 'Signature Field' : 'Form Field';
-  };
+  // Disable type selection for certain modes
+  const isTypeSelectionDisabled = ['section', 'subsection', 'subsubsection'].includes(mode);
+  
+  // Helper to determine if field type options should be shown
+  const showFieldTypeOptions = formData.type === 'field';
   
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -259,8 +275,12 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
       </DialogTitle>
       
       <DialogContent dividers>
-        {/* Block Type Selection - only show in field-or-signature mode */}
-        {showBlockTypeOptions && (
+        <Typography className={classes.modeLabel}>
+          {getModeLabel()}
+        </Typography>
+        
+        {/* Block Type Selection - Only for field-or-signature mode */}
+        {mode === 'field-or-signature' && (
           <FormControl className={classes.formSection} fullWidth margin="normal">
             <InputLabel>Block Type</InputLabel>
             <Select
@@ -271,6 +291,9 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
               <MenuItem value="field">Field Block (Question/Data Field)</MenuItem>
               <MenuItem value="signature">Signature Block</MenuItem>
             </Select>
+            <Typography className={classes.helpText}>
+              Choose "Field Block" for collecting data or "Signature Block" to add a signature field.
+            </Typography>
           </FormControl>
         )}
         
@@ -285,6 +308,11 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
             value={formData.title}
             onChange={handleInputChange}
           />
+          <Typography className={classes.helpText}>
+            {formData.type === 'group' 
+              ? 'Section title that will appear in the form (e.g., "Engine Information")' 
+              : 'Field label that will appear next to the input (e.g., "Serial Number")'}
+          </Typography>
           
           <TextField
             fullWidth
@@ -296,12 +324,15 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
             multiline
             rows={2}
           />
+          <Typography className={classes.helpText}>
+            Optional text that provides more details or instructions about this {formData.type === 'group' ? 'section' : 'field'}.
+          </Typography>
         </div>
         
         <Divider className={classes.divider} />
         
         {/* Field-specific options */}
-        {formData.type === 'field' && (
+        {showFieldTypeOptions && (
           <>
             <div className={classes.formSection}>
               <FormControl fullWidth margin="normal">
@@ -317,6 +348,9 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
                     </MenuItem>
                   ))}
                 </Select>
+                <Typography className={classes.helpText}>
+                  Select the type of data this field will collect.
+                </Typography>
               </FormControl>
               
               <FormControlLabel
@@ -330,6 +364,9 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
                 }
                 label="Required Field"
               />
+              <Typography className={classes.helpText}>
+                If checked, users must complete this field before submitting the form.
+              </Typography>
             </div>
             
             {/* Field Properties based on selected field type */}
@@ -358,6 +395,10 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
                     margin="normal"
                     style={{ marginLeft: '16px' }}
                   />
+                  <Typography className={classes.helpText}>
+                    Optional: Set minimum and maximum character limits for text input.
+                  </Typography>
+                  
                   <TextField
                     fullWidth
                     label="Validation Pattern (RegEx)"
@@ -397,16 +438,22 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
                     onChange={handleValidationChange}
                     margin="normal"
                     style={{ marginLeft: '16px' }}
-                    helperText="e.g. kg, cm, etc."
+                    helperText="e.g. kg, cm, hours, etc."
                   />
+                  <Typography className={classes.helpText}>
+                    Optional: Set minimum and maximum values, and specify units of measurement.
+                  </Typography>
                 </>
               )}
               
               {/* Multiple choice/dropdown options */}
-              {(formData.fieldType === 'radio' || formData.fieldType === 'dropdown' || formData.fieldType === 'multi_choice') && (
+              {(['radio', 'dropdown', 'multi_choice'].includes(formData.fieldType)) && (
                 <div className={classes.formSection}>
                   <Typography variant="subtitle2" gutterBottom>
                     Options
+                  </Typography>
+                  <Typography className={classes.helpText}>
+                    Add the choices that will be available to the user.
                   </Typography>
                   
                   <div style={{ display: 'flex' }}>
@@ -418,13 +465,15 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
                       onChange={handleInputChange}
                       margin="normal"
                     />
-                    <IconButton 
-                      color="primary" 
-                      onClick={handleAddOption}
-                      style={{ alignSelf: 'center', marginLeft: '8px' }}
-                    >
-                      <AddIcon />
-                    </IconButton>
+                    <Tooltip title="Add this option" arrow>
+                      <IconButton 
+                        color="primary" 
+                        onClick={handleAddOption}
+                        style={{ alignSelf: 'center', marginLeft: '8px' }}
+                      >
+                        <AddIcon />
+                      </IconButton>
+                    </Tooltip>
                   </div>
                   
                   {formData.options.length > 0 && (
@@ -433,9 +482,11 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
                         <ListItem key={index} dense>
                           <ListItemText primary={option} />
                           <ListItemSecondaryAction>
-                            <IconButton edge="end" onClick={() => handleRemoveOption(index)}>
-                              <DeleteIcon />
-                            </IconButton>
+                            <Tooltip title="Remove this option" arrow>
+                              <IconButton edge="end" onClick={() => handleRemoveOption(index)}>
+                                <DeleteIcon />
+                              </IconButton>
+                            </Tooltip>
                           </ListItemSecondaryAction>
                         </ListItem>
                       ))}
@@ -465,6 +516,9 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
               }
               label="Auto-insert date when signed"
             />
+            <Typography className={classes.helpText}>
+              When a signature is applied, the current date will be automatically included.
+            </Typography>
           </div>
         )}
       </DialogContent>
@@ -474,7 +528,7 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
           Cancel
         </Button>
         <Button onClick={handleSave} color="primary" disabled={!formData.title}>
-          Save Block
+          Save {formData.type === 'group' ? 'Section' : formData.type === 'signature' ? 'Signature Field' : 'Field'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -484,9 +538,9 @@ function BlockEditor({ open, block, mode = 'field', onSave, onClose }) {
 BlockEditor.propTypes = {
   open: PropTypes.bool.isRequired,
   block: PropTypes.object,
-  mode: PropTypes.oneOf(['section', 'field', 'signature', 'field-or-signature']),
   onSave: PropTypes.func.isRequired,
-  onClose: PropTypes.func.isRequired
+  onClose: PropTypes.func.isRequired,
+  mode: PropTypes.oneOf(['section', 'subsection', 'subsubsection', 'field-or-signature']).isRequired
 };
 
 export default BlockEditor;
